@@ -1,24 +1,46 @@
-# core/database.py
 import streamlit as st
-from core.models import Account, Student, Lecturer, Major, Course, Section, GradeReport, GradeReviewRequest
+from core.models import * # <--- Dùng * để import đủ 11 class (Admin, Faculty, Semester...)
 
 class MockDatabase:
     def __init__(self):
         if 'db_init' not in st.session_state:
             self._init_data()
             st.session_state['db_init'] = True
+        
+        # --- Mapping các biến từ Session State ra để Controller dùng ---
+        self.users = st.session_state.get('users', {})
+        self.courses = st.session_state.get('courses', {})
+        self.sections = st.session_state.get('sections', [])
+        self.grades = st.session_state.get('grades', [])
+        self.requests = st.session_state.get('requests', [])
+        self.majors = st.session_state.get('majors', {})
+        
+        # --- BỔ SUNG MAPPING CHO CLASS MỚI ---
+        self.faculties = st.session_state.get('faculties', [])
+        self.semesters = st.session_state.get('semesters', [])
 
     def _init_data(self):
-        # 1. Majors
+        # 1. Faculties (KHOA - MỚI)
+        faculties = [
+            Faculty("IT", "Công nghệ Thông tin"),
+            Faculty("BA", "Quản trị Kinh doanh")
+        ]
+
+        # 2. Majors (NGÀNH)
         majors = {
             "SE": Major("SE", "Kỹ thuật Phần mềm", 150, "IT"),
             "IS": Major("IS", "Hệ thống Thông tin", 145, "IT"),
         }
 
-        # 2. Users 
-        # --- QUAN TRỌNG: Thêm email cho Admin để test UC3 ---
+        # 3. Semesters (HỌC KỲ - MỚI)
+        semesters = [
+            Semester("HK1_2024", "Học kỳ 1 Năm 2024", "2024-09-05", "2025-01-15")
+        ]
+
+        # 4. Users 
+        # --- Sửa: Dùng class Admin thay vì Account ---
         admins = {
-            "admin": Account(userID="admin", password="123", role="Admin", email="superstudentmanagementsystem@gmail.com") 
+            "admin": Admin(userID="admin", password="123", role="Admin", email="superstudentmanagementsystem@gmail.com") 
         }
 
         students = {
@@ -48,46 +70,47 @@ class MockDatabase:
             )
         }
 
-        # 3. Courses
+        # 5. Courses
         courses = {
             "SE101": Course("SE101", "Nhập môn CNPM", 3),
             "DB201": Course("DB201", "Cơ sở dữ liệu", 4),
             "MATH1": Course("MATH1", "Đại số tuyến tính", 3),
         }
 
-        # 4. Sections
+        # 6. Sections
         sections = [
             Section("SE101.N11", "SE101", "gv01", "HK1_2024", "C201", "Thứ 2", 1, 3),
             Section("DB201.N12", "DB201", "gv01", "HK1_2024", "B102", "Thứ 4", 7, 9),
         ]
 
-        # 5. Grades
+        # 7. Grades
         grades = [
             GradeReport("sv01", "SE101.N11", 8.0, 8.5),
             GradeReport("sv01", "DB201.N12", 7.5, None),
             GradeReport("sv02", "SE101.N11", 6.0, 7.0),
         ]
 
-        # 6. Requests
+        # 8. Requests
         requests = [
             GradeReviewRequest("REQ001", "sv01", "SE101.N11", "Em nghĩ bài thi em làm tốt hơn 8.5", "Pending", "", "2024-01-15")
         ]
 
-        # Lưu vào Session
+        # --- LƯU VÀO SESSION STATE ---
+        st.session_state['faculties'] = faculties # <--- Mới
         st.session_state['majors'] = majors
-        # GỘP USER
+        st.session_state['semesters'] = semesters # <--- Mới
         st.session_state['users'] = {**admins, **students, **lecturers} 
         st.session_state['courses'] = courses
         st.session_state['sections'] = sections
         st.session_state['grades'] = grades
         st.session_state['requests'] = requests
     
-    # ... (Các hàm helper giữ nguyên như cũ) ...
-    def get_user(self, user_id): return st.session_state['users'].get(user_id)
-    def get_student_grades(self, student_id): return [g for g in st.session_state['grades'] if g.studentID == student_id]
-    def get_course_by_id(self, course_id): return st.session_state['courses'].get(course_id)
+    # --- Helper Methods ---
+    def get_user(self, user_id): return self.users.get(user_id)
+    def get_student_grades(self, student_id): return [g for g in self.grades if g.studentID == student_id]
+    def get_course_by_id(self, course_id): return self.courses.get(course_id)
     def get_section_by_id(self, section_id):
-        for s in st.session_state['sections']:
+        for s in self.sections:
             if s.sectionID == section_id: return s
         return None
-    def get_major(self, major_id): return st.session_state['majors'].get(major_id)
+    def get_major(self, major_id): return self.majors.get(major_id)

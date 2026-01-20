@@ -1,15 +1,19 @@
+# --- 1. BASE CLASS ---
 class Account:
-    # Thêm tham số status=True (Mặc định là tài khoản đang hoạt động)
     def __init__(self, userID, password, role, email=None, status=True):
         self.userID = userID
         self.password = password
         self.role = role
         self.email = email
-        self.status = status # <--- BỔ SUNG DÒNG NÀY
+        self.status = status  # Trạng thái hoạt động
+
+# --- 2. USER ROLE CLASSES ---
+class Admin(Account):
+    def __init__(self, userID, password, role, email, status=True):
+        super().__init__(userID, password, role, email, status)
 
 class Student(Account):
     def __init__(self, userID, password, role, fullName, dob, pob, citizenID, gender, address, phone, email, majorID, facultyID, status=True):
-        # Truyền status lên lớp cha
         super().__init__(userID, password, role, email, status)
         self.fullName = fullName
         self.dob = dob
@@ -23,7 +27,6 @@ class Student(Account):
 
 class Lecturer(Account):
     def __init__(self, userID, password, role, fullName, dob, pob, citizenID, gender, address, phone, email, degree, position, status=True):
-        # Truyền status lên lớp cha
         super().__init__(userID, password, role, email, status)
         self.fullName = fullName
         self.dob = dob
@@ -35,13 +38,25 @@ class Lecturer(Account):
         self.degree = degree
         self.position = position
 
-# ... (Các class Major, Course, Section, GradeReport, GradeReviewRequest GIỮ NGUYÊN KHÔNG ĐỔI) ...
+# --- 3. ACADEMIC CLASSES ---
+class Faculty:  # <--- CLASS MỚI (9)
+    def __init__(self, facultyID, facultyName):
+        self.facultyID = facultyID
+        self.facultyName = facultyName
+
 class Major:
     def __init__(self, majorID, majorName, requiredCredits, facultyID):
         self.majorID = majorID
         self.majorName = majorName
         self.requiredCredits = requiredCredits
         self.facultyID = facultyID
+
+class Semester: # <--- CLASS MỚI (10)
+    def __init__(self, semesterID, semesterName, startDate, endDate):
+        self.semesterID = semesterID
+        self.semesterName = semesterName
+        self.startDate = startDate
+        self.endDate = endDate
 
 class Course:
     def __init__(self, courseID, courseName, credits):
@@ -60,6 +75,7 @@ class Section:
         self.startPeriod = startPeriod
         self.endPeriod = endPeriod
 
+# --- 4. GRADE & REQUEST CLASSES ---
 class GradeReport:
     def __init__(self, studentID, sectionID, componentGrade, finalScore):
         self.studentID = studentID
@@ -67,7 +83,7 @@ class GradeReport:
         self.componentGrade = componentGrade
         self.finalScore = finalScore
 
-class GradeReviewRequest:
+class GradeReviewRequest: # <--- CLASS (11)
     def __init__(self, requestID, studentID, sectionID, reason, status, reply, createDate):
         self.requestID = requestID
         self.studentID = studentID
