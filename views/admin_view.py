@@ -195,3 +195,5 @@ def render_admin_ui(user):
                 ok, msg = auth.change_password(user.userID, o, n, c)
                 if ok: st.success(msg)
                 else: st.error(msg)
+    
+    

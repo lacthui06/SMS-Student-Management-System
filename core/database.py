@@ -114,3 +114,113 @@ class MockDatabase:
             if s.sectionID == section_id: return s
         return None
     def get_major(self, major_id): return self.majors.get(major_id)
+       
+       
+    # -------- UC 14: LOCK / UNLOCK USER ----------
+    def lock_user(self, user_id, reason):
+        user = self.users.get(user_id)
+        if not user:
+            return False, "Không tìm thấy người dùng"
+        user.status = "LOCKED"
+        user.lock_reason = reason
+        return True, "Khóa tài khoản thành công"
+
+    def unlock_user(self, user_id):
+        user = self.users.get(user_id)
+        if not user:
+            return False, "Không tìm thấy người dùng"
+        user.status = "ACTIVE"
+        if hasattr(user, 'lock_reason'):
+            delattr(user, 'lock_reason')
+        return True, "Mở khóa tài khoản thành công"
+
+    # -------- UC 15: MANAGE SEMESTER ----------
+    def add_semester(self, semester: Semester):
+        if any(s.semesterID == semester.semesterID for s in self.semesters):
+            return False, "Trùng mã học kỳ"
+        self.semesters.append(semester)
+        st.session_state['semesters'] = self.semesters
+        return True, "Thêm học kỳ thành công"
+
+    def update_semester(self, sem_id, start, end):
+        for s in self.semesters:
+            if s.semesterID == sem_id:
+                s.startDate = start
+                s.endDate = end
+                return True, "Cập nhật học kỳ thành công"
+        return False, "Không tìm thấy học kỳ"
+
+    def delete_semester(self, sem_id):
+        for s in self.semesters:
+            if s.semesterID == sem_id:
+                self.semesters.remove(s)
+                return True, "Xóa học kỳ thành công"
+        return False, "Không tìm thấy học kỳ"
+
+    # -------- UC 16: MANAGE COURSE ----------
+    def update_course(self, course_id, name=None, credits=None):
+        course = self.courses.get(course_id)
+        if not course:
+            return False, "Không tìm thấy môn học"
+        if name is not None:
+            course.name = name
+        if credits is not None:
+            course.credits = credits
+        return True, "Cập nhật môn học thành công"
+
+    # -------- UC 17: MANAGE SECTION ----------
+    def update_section(self, section_id, room=None, day=None, p1=None, p2=None):
+        section = self.get_section_by_id(section_id)
+        if not section:
+            return False, "Không tìm thấy lớp học phần"
+        if room is not None:
+            section.room = room
+        if day is not None:
+            section.day = day
+        if p1 is not None:
+            section.periodStart = p1
+        if p2 is not None:
+            section.periodEnd = p2
+        return True, "Cập nhật lớp học phần thành công"
+
+    # -------- UC 18: CURRICULUM ----------
+    def add_curriculum_item(self, major_id, course_id, semester_no, required=True):
+        curriculum = st.session_state.get('curriculum', [])
+        curriculum.append({
+            "majorID": major_id,
+            "courseID": course_id,
+            "semester": semester_no,
+            "required": required
+        })
+        st.session_state['curriculum'] = curriculum
+        return True, "Thêm vào khung chương trình thành công"
+
+    def get_curriculum(self, major_id=None):
+        curriculum = st.session_state.get('curriculum', [])
+        if major_id:
+            curriculum = [c for c in curriculum if c['majorID'] == major_id]
+        return curriculum
+
+    # -------- UC 19: CREATE SECTION ----------
+    def create_section(self, section: Section):
+        if any(s.sectionID == section.sectionID for s in self.sections):
+            return False, "Trùng mã lớp học phần"
+        self.sections.append(section)
+        st.session_state['sections'] = self.sections
+        return True, "Tạo lớp học phần thành công"
+
+    # -------- UC 20: CANCEL SECTION ----------
+    def cancel_section(self, section_id):
+        section = self.get_section_by_id(section_id)
+        if not section:
+            return False, "Không tìm thấy lớp học phần"
+        section.status = "CANCELED"
+        return True, "Hủy lớp thành công"
+
+    # -------- UC 21 / 22: COURSE CREATE / DELETE ----------
+    def delete_course(self, course_id):
+        if course_id not in self.courses:
+            return False, "Không tìm thấy môn học"
+        del self.courses[course_id]
+        st.session_state['courses'] = self.courses
+        return True, "Xóa môn học thành công"
