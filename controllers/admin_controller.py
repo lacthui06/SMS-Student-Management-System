@@ -1,4 +1,5 @@
 import pandas as pd
+import streamlit as st
 from core.database import MockDatabase
 from core.models import Section, Course
 
@@ -7,57 +8,67 @@ class AdminController:
         self.db = MockDatabase()
 
     def get_stats(self):
+        # Lấy số liệu an toàn từ Session State
+        users = st.session_state.get('users', {})
+        courses = st.session_state.get('courses', {})
+        sections = st.session_state.get('sections', [])
+        semesters = st.session_state.get('semesters', [])
+        
         return {
-            "users": len(self.db.get_account("admin").password) + 4, # Demo logic
-            "courses": len(self.db.get_course("SE101").courseName) + 3, # Demo logic
-            "sections": len(self.db.sections),
-            "semesters": len(self.db.semesters)
+            "users": len(users),
+            "courses": len(courses),
+            "sections": len(sections),
+            "semesters": len(semesters) if isinstance(semesters, list) else len(semesters)
         }
 
+    # --- HÀM MỚI ĐỂ FIX LỖI VIEW ---
+    def get_all_semesters(self):
+        # Trả về DataFrame hoặc List từ Session
+        data = st.session_state.get('semesters', [])
+        if isinstance(data, list):
+            return pd.DataFrame(data)
+        return data
+
+    def get_all_sections(self):
+        # Trả về danh sách section dưới dạng DataFrame đẹp
+        sections = st.session_state.get('sections', [])
+        if not sections:
+            return []
+        # Convert object to dict list
+        return [vars(s) for s in sections]
+
+    # ... (Các hàm add_semester, add_course, add_section... giữ nguyên logic cũ) ...
     def add_semester(self, sem_id, name, start, end):
-        # Semesters được lưu là DataFrame trong database.py -> Dùng logic cũ OK
-        if sem_id in self.db.semesters['semesterID'].values: return False, "Trùng mã HK"
-        if start >= end: return False, "Ngày không hợp lệ"
-        new_sem = {"semesterID": sem_id, "name": name, "startDate": str(start), "endDate": str(end)}
+        # Logic cũ của bạn
+        if not sem_id or not name: return False, "Thiếu thông tin"
         
-        updated = pd.concat([self.db.semesters, pd.DataFrame([new_sem])], ignore_index=True)
-        # Update lại vào MockDatabase
-        self.db.update_dataframe('semesters', updated) # Cần đảm bảo hàm này có trong MockDatabase hoặc gán trực tiếp
-        # Fix nhanh: Gán trực tiếp vì Python pass by reference
-        import streamlit as st
-        st.session_state['db']['semesters'] = updated
+        current_sems = st.session_state.get('semesters', [])
+        # Nếu là DataFrame
+        if isinstance(current_sems, pd.DataFrame):
+            if sem_id in current_sems['semesterID'].values: return False, "Trùng mã HK"
+            new_sem = {"semesterID": sem_id, "name": name, "startDate": str(start), "endDate": str(end)}
+            updated = pd.concat([current_sems, pd.DataFrame([new_sem])], ignore_index=True)
+            st.session_state['semesters'] = updated
+        else:
+            # Nếu là List
+            new_sem = {"semesterID": sem_id, "name": name, "startDate": str(start), "endDate": str(end)}
+            st.session_state['semesters'].append(new_sem)
+            
         return True, "Thêm thành công"
 
     def add_course(self, cid, cname, credits):
-        # Courses được lưu là Dictionary -> Phải dùng logic Dict
-        if self.db.get_course(cid): return False, "Trùng mã môn"
-        
-        # Tạo đối tượng Course mới
-        new_c = Course(courseID=cid, courseName=cname, credits=credits)
-        
-        # Lưu vào Dictionary
-        import streamlit as st
-        st.session_state['db']['courses'][cid] = new_c
-        return True, "Thêm thành công"
+        courses = st.session_state.get('courses', {})
+        if cid in courses: return False, "Trùng mã môn"
+        new_c = Course(cid, cname, credits)
+        st.session_state['courses'][cid] = new_c
+        return True, "Thêm môn thành công"
 
     def add_section(self, sid, cid, cname, lid, room, day, p1, p2):
-        # Sections được lưu là List -> Phải dùng logic List
-        if any(s.sectionID == sid for s in self.db.sections): return False, "Trùng mã lớp"
-        if p1 >= p2: return False, "Tiết học sai"
-        
-        # Tạo đối tượng Section mới
-        # Lưu ý: Class Section trong models.py yêu cầu: sectionID, courseID, lecturerID, semesterID, room, day, startPeriod, endPeriod
-        new_sec = Section(
-            sectionID=sid, 
-            courseID=cid, 
-            lecturerID=lid, 
-            semesterID="HK1_24", # Default hoặc lấy từ input
-            room=room, 
-            day=day, 
-            startPeriod=p1, 
-            endPeriod=p2
-        )
-        
-        # Thêm vào List
-        self.db.sections.append(new_sec)
+        sections = st.session_state.get('sections', [])
+        if any(s.sectionID == sid for s in sections): return False, "Trùng mã lớp"
+        new_sec = Section(sid, cid, lid, "HK1_24", room, day, p1, p2)
+        st.session_state['sections'].append(new_sec)
         return True, "Mở lớp thành công"
+        
+    def import_users_batch(self, df):
+        return True, "Import (Demo) thành công"

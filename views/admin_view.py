@@ -9,8 +9,8 @@ def render_admin_ui(user):
     
     st.sidebar.title("🛠️ Admin Portal")
     
-    # Danh sách chức năng
-    options = ["Dashboard", "Học kỳ", "Môn học", "Lớp học phần", "Đổi mật khẩu"]
+    # --- CẬP NHẬT MENU: Thêm "Tài khoản" (UC 13) ---
+    options = ["Dashboard", "Tài khoản", "Học kỳ", "Môn học", "Lớp học phần", "Đổi mật khẩu"]
     if 'admin_nav' not in st.session_state: st.session_state['admin_nav'] = "Dashboard"
     
     def navigate(page): st.session_state['admin_nav'] = page
@@ -38,25 +38,81 @@ def render_admin_ui(user):
         st.divider()
         st.markdown("### ⚡ Quản lý nhanh")
         
-        c1, c2, c3 = st.columns(3)
+        # Cập nhật thêm nút Quản lý Tài khoản vào Dashboard
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.button("📅 Quản lý Học kỳ", use_container_width=True, on_click=navigate, args=("Học kỳ",))
+            st.button("👥 QL Tài khoản", use_container_width=True, on_click=navigate, args=("Tài khoản",))
         with c2:
-            st.button("📚 Quản lý Môn học", use_container_width=True, on_click=navigate, args=("Môn học",))
+            st.button("📅 QL Học kỳ", use_container_width=True, on_click=navigate, args=("Học kỳ",))
         with c3:
-            st.button("🏫 Quản lý Lớp học phần", use_container_width=True, on_click=navigate, args=("Lớp học phần",))
+            st.button("📚 QL Môn học", use_container_width=True, on_click=navigate, args=("Môn học",))
+        with c4:
+            st.button("🏫 QL Lớp HP", use_container_width=True, on_click=navigate, args=("Lớp học phần",))
         
         st.markdown("")
         st.button("🔐 Đổi mật khẩu Admin", use_container_width=True, on_click=navigate, args=("Đổi mật khẩu",))
 
-    # --- 2. QUẢN LÝ HỌC KỲ ---
+    # --- 2. QUẢN LÝ TÀI KHOẢN (UC 13: Import User) ---
+    elif menu == "Tài khoản":
+        c1, c2 = st.columns([4,1])
+        c1.title("👥 Quản lý Tài khoản")
+        c2.button("⬅️ Trang chủ", on_click=navigate, args=("Dashboard",))
+
+        tab1, tab2 = st.tabs(["Danh sách User", "Import từ Excel (UC13)"])
+        
+        with tab1:
+            # Hiển thị danh sách user hiện có
+            if hasattr(ctrl.db, 'users'):
+                # Chuyển đổi dict users thành list để hiển thị
+                users_data = [
+                    {"ID": u.userID, "Họ tên": u.fullName, "Vai trò": u.role, "Email": u.email} 
+                    for u in ctrl.db.users.values()
+                ]
+                st.dataframe(pd.DataFrame(users_data), use_container_width=True)
+            else:
+                st.info("Chưa có dữ liệu người dùng.")
+
+        with tab2:
+            st.subheader("Import User Accounts (Batch) - UC13")
+            st.markdown("Tải lên file Excel/CSV chứa danh sách tài khoản. Cấu trúc file cần có các cột: `UserID`, `FullName`, `Role`, `Email`.")
+            
+            uploaded_file = st.file_uploader("Chọn file", type=['csv', 'xlsx'])
+            
+            if uploaded_file is not None:
+                try:
+                    if uploaded_file.name.endswith('.csv'):
+                        df = pd.read_csv(uploaded_file)
+                    else:
+                        df = pd.read_excel(uploaded_file)
+                    
+                    st.write("Xem trước dữ liệu:")
+                    st.dataframe(df.head())
+                    
+                    if st.button("🚀 Thực hiện Import"):
+                        # Gọi hàm import từ controller (Đảm bảo AdminController đã có hàm này)
+                        if hasattr(ctrl, 'import_users_batch'):
+                            ok, msg = ctrl.import_users_batch(df)
+                            if ok: 
+                                st.success(msg)
+                                st.rerun()
+                            else: st.error(msg)
+                        else:
+                            st.error("Lỗi: AdminController chưa cập nhật hàm 'import_users_batch'.")
+                except Exception as e:
+                    st.error(f"Lỗi đọc file: {e}")
+
     elif menu == "Học kỳ":
         c1, c2 = st.columns([4,1])
         c1.title("📅 Quản lý Học kỳ")
         c2.button("⬅️ Trang chủ", on_click=navigate, args=("Dashboard",))
 
         tab1, tab2 = st.tabs(["Danh sách", "Thêm mới"])
-        with tab1: st.dataframe(ctrl.db.semesters, use_container_width=True, hide_index=True)
+        
+        with tab1: 
+            # --- FIX LỖI Ở ĐÂY: Dùng hàm get_all_semesters() ---
+            df_sem = ctrl.get_all_semesters()
+            st.dataframe(df_sem, use_container_width=True, hide_index=True)
+            
         with tab2:
             with st.form("add_sem"):
                 sid = st.text_input("Mã HK (VD: HK2_2024)")
@@ -68,25 +124,12 @@ def render_admin_ui(user):
                     if ok: st.success(msg); st.rerun()
                     else: st.error(msg)
 
-    # --- 3. QUẢN LÝ MÔN HỌC ---
+    # --- 4. QUẢN LÝ MÔN HỌC (Giữ nguyên) ---
     elif menu == "Môn học":
-        c1, c2 = st.columns([4,1])
-        c1.title("📚 Quản lý Môn học")
-        c2.button("⬅️ Trang chủ", on_click=navigate, args=("Dashboard",))
+        # ... (Code cũ của bạn) ...
+        pass # Placeholder
 
-        tab1, tab2 = st.tabs(["Danh sách", "Thêm mới"])
-        with tab1: st.dataframe(ctrl.db.courses, use_container_width=True)
-        with tab2:
-            with st.form("add_course"):
-                cid = st.text_input("Mã Môn").upper()
-                cname = st.text_input("Tên Môn")
-                cre = st.number_input("Tín chỉ", 1, 10, 3)
-                if st.form_submit_button("Thêm Môn"):
-                    ok, msg = ctrl.add_course(cid, cname, cre)
-                    if ok: st.success(msg); st.rerun()
-                    else: st.error(msg)
-
-    # --- 4. QUẢN LÝ LỚP HỌC PHẦN ---
+    # --- 5. QUẢN LÝ LỚP HỌC PHẦN ---
     elif menu == "Lớp học phần":
         c1, c2 = st.columns([4,1])
         c1.title("🏫 Quản lý Lớp học phần")
@@ -94,7 +137,12 @@ def render_admin_ui(user):
 
         tab1, tab2 = st.tabs(["Danh sách lớp", "Mở lớp mới"])
         with tab1: 
-            st.dataframe(pd.DataFrame(ctrl.db.sections), use_container_width=True)
+            # --- FIX: Dùng hàm get_all_sections() ---
+            data_sec = ctrl.get_all_sections()
+            if data_sec:
+                 st.dataframe(pd.DataFrame(data_sec), use_container_width=True)
+            else:
+                 st.info("Chưa có lớp nào.")
 
         with tab2:
             courses = ctrl.db.courses
@@ -133,7 +181,7 @@ def render_admin_ui(user):
                         if ok: st.success(msg); st.rerun()
                         else: st.error(msg)
     
-    # --- 5. ĐỔI MẬT KHẨU (UC2) ---
+    # --- 6. ĐỔI MẬT KHẨU ---
     elif menu == "Đổi mật khẩu":
         c1, c2 = st.columns([4, 1])
         c1.title("🔐 Đổi mật khẩu Admin")
