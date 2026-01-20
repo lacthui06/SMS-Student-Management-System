@@ -21,7 +21,7 @@ def render_lecturer_ui(user):
     menu = st.sidebar.radio("Menu", options, key="lec_nav")
     st.sidebar.button("Đăng xuất", on_click=logout)
 
-    # --- Helper hiển thị thông tin ---
+    # --- Helper hiển thị thông tin (GIỮ NGUYÊN) ---
     st.markdown("""
         <style>
         .profile-row { font-size: 15px; margin-bottom: 8px; }
@@ -32,7 +32,7 @@ def render_lecturer_ui(user):
     def row(label, value):
         st.markdown(f"<div class='profile-row'><span class='profile-label'>{label}:</span> <span class='profile-val'>{value}</span></div>", unsafe_allow_html=True)
 
-    # --- 1. DASHBOARD ---
+    # --- 1. DASHBOARD (GIỮ NGUYÊN) ---
     if menu == "Dashboard":
         st.title("🏠 Trang chủ Giảng viên")
         
@@ -67,7 +67,7 @@ def render_lecturer_ui(user):
         with c5:
              st.button("🔐 Đổi mật khẩu", use_container_width=True, on_click=navigate, args=("Đổi mật khẩu",))
 
-    # --- 2. HỒ SƠ ---
+    # --- 2. HỒ SƠ (GIỮ NGUYÊN) ---
     elif menu == "Hồ sơ":
         c1, c2 = st.columns([4, 1])
         c1.title("Hồ sơ Giảng viên")
@@ -100,11 +100,15 @@ def render_lecturer_ui(user):
                 em = st.text_input("Email", user.email)
                 ad = st.text_input("Địa chỉ", user.address)
                 if st.form_submit_button("Lưu thay đổi"):
-                    ctrl.update_contact_info(ph, em, ad)
-                    st.success("Đã cập nhật!")
-                    st.rerun()
+                    # Controller đã có logic validate
+                    ok, msg = ctrl.update_contact_info(ph, em, ad)
+                    if ok:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
 
-    # --- 3. LỊCH DẠY ---
+    # --- 3. LỊCH DẠY (GIỮ NGUYÊN) ---
     elif menu == "Lịch dạy":
         c1, c2 = st.columns([4, 1])
         c1.title("📅 Lịch giảng dạy")
@@ -117,10 +121,10 @@ def render_lecturer_ui(user):
         else:
             st.warning("Hiện chưa có lịch dạy.")
 
-    # --- 4. NHẬP ĐIỂM ---
+    # --- 4. NHẬP ĐIỂM (CẬP NHẬT LOGIC UC10/UC11) ---
     elif menu == "Nhập điểm":
         c1, c2 = st.columns([4, 1])
-        c1.title("📝 Nhập điểm Sinh viên")
+        c1.title("📝 Quản lý Điểm")
         c2.button("⬅️ Trang chủ", key="back_grade", on_click=navigate, args=("Dashboard",))
 
         opts = ctrl.get_my_sections()
@@ -131,9 +135,15 @@ def render_lecturer_ui(user):
             sec_id = sel.split(" - ")[0]
             data = ctrl.get_students_in_section(sec_id)
             
-            st.info("Nhập điểm trực tiếp vào bảng (Thang điểm 10):")
+            # --- Logic mới: Kiểm tra chế độ Nhập (UC10) hay Sửa (UC11) ---
+            has_grades = any(row['Điểm CK'] is not None for row in data)
             
-            # --- CẤU HÌNH GIAO DIỆN (BỎ chặn Min/Max để cho phép nhập sai) ---
+            if has_grades:
+                st.info("ℹ️ Lớp đã có điểm. Chế độ: **Cập nhật (UC11)**")
+            else:
+                st.success("🆕 Lớp chưa có điểm. Chế độ: **Nhập mới (UC10)**")
+            
+            # Bảng nhập liệu (Giữ cấu hình column của bạn)
             edited = st.data_editor(
                 data, 
                 num_rows="fixed", 
@@ -141,30 +151,31 @@ def render_lecturer_ui(user):
                 column_config={
                     "MSSV": st.column_config.TextColumn(disabled=True),
                     "Họ tên": st.column_config.TextColumn(disabled=True),
-                    "Điểm QT": st.column_config.NumberColumn(
-                        "Điểm QT",
-                        step=0.1,
-                        format="%.1f"
-                        # ĐÃ BỎ min_value, max_value ĐỂ TRÁNH TỰ SỬA THÀNH 10
-                    ),
-                    "Điểm CK": st.column_config.NumberColumn(
-                        "Điểm CK",
-                        step=0.1,
-                        format="%.1f"
-                        # ĐÃ BỎ min_value, max_value ĐỂ TRÁNH TỰ SỬA THÀNH 10
-                    )
+                    "Điểm QT": st.column_config.NumberColumn("Điểm QT", step=0.1, format="%.1f"),
+                    "Điểm CK": st.column_config.NumberColumn("Điểm CK", step=0.1, format="%.1f")
                 }
             )
             
-            if st.button("💾 Lưu bảng điểm"):
-                ok, msg = ctrl.save_grades(sec_id, edited)
-                if ok: 
-                    st.success(msg)
-                else: 
-                    # HIỆN LỖI ĐỎ NẾU NHẬP SAI
-                    st.error(msg)
+            with st.form("save_grades"):
+                # Nếu là Update (UC11), thêm ô nhập Lý do
+                reason = ""
+                if has_grades:
+                    st.markdown("**Lý do chỉnh sửa (Bắt buộc cho UC11):**")
+                    reason = st.text_input("Lý do", placeholder="VD: Nhập sai sót, Phúc khảo...", label_visibility="collapsed")
+                
+                if st.form_submit_button("💾 Lưu bảng điểm"):
+                    # Validate lý do ở tầng View
+                    if has_grades and not reason.strip():
+                        st.error("❌ Vui lòng nhập lý do chỉnh sửa điểm.")
+                    else:
+                        # Gọi controller kèm reason
+                        ok, msg = ctrl.save_grades(sec_id, edited, reason)
+                        if ok: 
+                            st.success(msg)
+                        else: 
+                            st.error(msg)
 
-    # --- 5. DUYỆT PHÚC KHẢO ---
+    # --- 5. DUYỆT PHÚC KHẢO (CẬP NHẬT GIAO DIỆN UC12) ---
     elif menu == "Duyệt phúc khảo":
         c1, c2 = st.columns([4, 1])
         c1.title("📩 Duyệt yêu cầu phúc khảo")
@@ -181,16 +192,23 @@ def render_lecturer_ui(user):
                     st.markdown(f"**Trạng thái hiện tại:** `{r.status}`")
                     
                     with st.form(key=f"f_{r.requestID}"):
-                        c1, c2 = st.columns(2)
-                        new_stt = c1.selectbox("Trạng thái", ["Pending", "Approved", "Rejected"], index=["Pending", "Approved", "Rejected"].index(r.status), key=f"s_{r.requestID}")
-                        reply = c2.text_input("Phản hồi", value=r.reply, key=f"r_{r.requestID}")
+                        reply = st.text_input("Phản hồi của GV", value=r.reply, key=f"r_{r.requestID}")
                         
-                        if st.form_submit_button("Cập nhật"):
-                            ctrl.process_review(r.requestID, new_stt, reply)
-                            st.success("Đã xử lý xong!")
-                            st.rerun()
+                        # Thay Selectbox bằng Radio cho đúng flow Accept/Reject
+                        action = st.radio("Quyết định", ["Chưa xử lý", "Chấp nhận (Accept)", "Từ chối (Reject)"], key=f"rad_{r.requestID}")
+                        
+                        if st.form_submit_button("Xác nhận"):
+                            if action == "Chưa xử lý":
+                                st.warning("Vui lòng chọn kết quả.")
+                            else:
+                                stt = "Approved" if action == "Chấp nhận (Accept)" else "Rejected"
+                                ok, msg = ctrl.process_review(r.requestID, stt, reply)
+                                if ok: 
+                                    st.success(msg)
+                                    st.rerun()
+                                else: st.error(msg)
 
-    # --- 6. ĐỔI MẬT KHẨU (UC2) ---
+    # --- 6. ĐỔI MẬT KHẨU (GIỮ NGUYÊN) ---
     elif menu == "Đổi mật khẩu":
         c1, c2 = st.columns([4, 1])
         c1.title("🔐 Đổi mật khẩu")
