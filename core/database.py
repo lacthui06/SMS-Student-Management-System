@@ -40,7 +40,7 @@ class MockDatabase:
         # 4. Users 
         # --- Sửa: Dùng class Admin thay vì Account ---
         admins = {
-            "admin": Admin(userID="admin", password="123", role="Admin", email="superstudentmanagementsystem@gmail.com") 
+            "admin": Admin(userID="admin", password="123", role="Admin", fullName="Quản trị viên", email="superstudentmanagementsystem@gmail.com") 
         }
 
         students = {

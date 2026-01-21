@@ -9,8 +9,9 @@ class Account:
 
 # --- 2. USER ROLE CLASSES ---
 class Admin(Account):
-    def __init__(self, userID, password, role, email, status=True):
+    def __init__(self, userID, password, role, fullName, email, status=True):
         super().__init__(userID, password, role, email, status)
+        self.fullName = fullName
 
 class Student(Account):
     def __init__(self, userID, password, role, fullName, dob, pob, citizenID, gender, address, phone, email, majorID, facultyID, status=True):
