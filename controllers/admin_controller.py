@@ -72,3 +72,122 @@ class AdminController:
         
     def import_users_batch(self, df):
         return True, "Import (Demo) thành công"
+    
+        
+
+    # -------- UC 14: LOCK / UNLOCK USER ----------
+    def lock_user(self, user_id, reason):
+        users = st.session_state.get('users', {})
+        if user_id not in users:
+            return False, "Không tìm thấy người dùng"
+        users[user_id]['status'] = 'LOCKED'
+        users[user_id]['lock_reason'] = reason
+        return True, "Khóa tài khoản thành công"
+
+    def unlock_user(self, user_id):
+        users = st.session_state.get('users', {})
+        if user_id not in users:
+            return False, "Không tìm thấy người dùng"
+        users[user_id]['status'] = 'ACTIVE'
+        users[user_id].pop('lock_reason', None)
+        return True, "Mở khóa tài khoản thành công"
+
+    # -------- UC 15: MANAGE SEMESTER ----------
+    def update_semester(self, sem_id, start, end):
+        semesters = st.session_state.get('semesters', [])
+        for s in semesters:
+            if s['semesterID'] == sem_id:
+                s['startDate'] = str(start)
+                s['endDate'] = str(end)
+                return True, "Cập nhật học kỳ thành công"
+        return False, "Không tìm thấy học kỳ"
+
+    def delete_semester(self, sem_id):
+        semesters = st.session_state.get('semesters', [])
+        for s in semesters:
+            if s['semesterID'] == sem_id:
+                semesters.remove(s)
+                return True, "Xóa học kỳ thành công"
+        return False, "Không tìm thấy học kỳ"
+    
+        # -------- UC 16: MANAGE COURSE ----------
+    def update_course(self, cid, name=None, credits=None):
+        courses = st.session_state.get('courses', {})
+        if cid not in courses:
+            return False, "Không tìm thấy môn học"
+
+        course = courses[cid]
+        if name is not None:
+            course.name = name
+        if credits is not None:
+            course.credits = credits
+
+        return True, "Cập nhật môn học thành công"
+
+
+    # -------- UC 17: MANAGE SECTION ----------
+    def update_section(self, section_id, room=None, day=None, p1=None, p2=None):
+        sections = st.session_state.get('sections', [])
+        for s in sections:
+            if s.sectionID == section_id:
+                if room is not None: s.room = room
+                if day is not None: s.day = day
+                if p1 is not None: s.periodStart = p1
+                if p2 is not None: s.periodEnd = p2
+                return True, "Cập nhật lớp học phần thành công"
+        return False, "Không tìm thấy lớp học phần"
+
+    # -------- UC 19: CREATE SECTION (EXTENDED) ----------
+    def create_section_with_semester(self, sid, cid, lid, semester_id, room, day, p1, p2):
+        sections = st.session_state.get('sections', [])
+        if any(s.sectionID == sid for s in sections):
+            return False, "Trùng mã lớp học phần"
+        new_sec = Section(sid, cid, lid, semester_id, room, day, p1, p2)
+        sections.append(new_sec)
+        return True, "Tạo lớp học phần thành công"
+
+    
+        
+    # -------- UC 18: MANAGE CURRICULUM ----------
+    def add_curriculum_item(self, major, course_id, semester_no, required=True):
+        curriculum = st.session_state.get('curriculum', [])
+        curriculum.append({
+            "major": major,
+            "courseID": course_id,
+            "semester": semester_no,
+            "required": required
+        })
+        st.session_state['curriculum'] = curriculum
+        return True, "Thêm môn vào khung chương trình thành công"
+
+    def get_curriculum(self, major=None):
+        curriculum = st.session_state.get('curriculum', [])
+        if major:
+            curriculum = [c for c in curriculum if c['major'] == major]
+        return pd.DataFrame(curriculum)
+
+    def remove_curriculum_item(self, major, course_id):
+        curriculum = st.session_state.get('curriculum', [])
+        for c in curriculum:
+            if c['major'] == major and c['courseID'] == course_id:
+                curriculum.remove(c)
+                return True, "Xóa môn khỏi khung chương trình thành công"
+        return False, "Không tìm thấy môn trong khung chương trình"
+
+
+    # -------- UC 20: CANCEL SECTION ----------
+    def cancel_section(self, section_id):
+        sections = st.session_state.get('sections', [])
+        for s in sections:
+            if s.sectionID == section_id:
+                s.status = "CANCELED"
+                return True, "Hủy lớp thành công"
+        return False, "Không tìm thấy lớp học phần"
+
+    # -------- UC 21 / 22: DELETE COURSE ----------
+    def delete_course(self, cid):
+        courses = st.session_state.get('courses', {})
+        if cid not in courses:
+            return False, "Không tìm thấy môn học"
+        del courses[cid]
+        return True, "Xóa môn học thành công"
