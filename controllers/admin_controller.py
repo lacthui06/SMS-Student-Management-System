@@ -17,7 +17,7 @@ class AdminController:
     def get_stats(self):
         try:
             return {
-                "users": self.session.query(User).count(),
+                "users": self.session.query(Account).count(),
                 "courses": self.session.query(Course).count(),
                 "sections": self.session.query(CourseSection).count(),
                 "semesters": self.session.query(Semester).count()

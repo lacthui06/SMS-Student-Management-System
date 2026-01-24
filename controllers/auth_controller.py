@@ -16,68 +16,67 @@ class AuthController:
     def login(self, user_id, password_input):
         try:
             user = self.session.query(Account).filter_by(userID=user_id).first()
-            
             if not user: return None, "❌ Tên đăng nhập không tồn tại!"
             if user.status == 0: return None, "🚫 Tài khoản đã bị khóa."
 
             hashed_input = self._hash_password(password_input)
-            
-            # Biến cờ để xác định đăng nhập thành công hay không
             login_success = False
             msg = ""
 
-            # Kiểm tra mật khẩu cũ (chưa hash)
             if len(user.password) < 60:
                 if user.password == password_input:
                     user.password = hashed_input
                     self.session.commit()
                     login_success = True
                     msg = "✅ Đăng nhập thành công (Đã nâng cấp bảo mật)!"
-                else:
-                    msg = "❌ Mật khẩu không đúng!"
-            
-            # Kiểm tra mật khẩu chuẩn (đã hash)
+                else: msg = "❌ Mật khẩu không đúng!"
             elif user.password == hashed_input:
                 login_success = True
                 msg = "✅ Đăng nhập thành công!"
-            else:
-                msg = "❌ Mật khẩu không đúng!"
+            else: msg = "❌ Mật khẩu không đúng!"
 
             if login_success:
-                # 👇 QUAN TRỌNG: Tách user ra khỏi session để dùng được sau khi close()
+                self.session.refresh(user)
                 self.session.expunge(user)
                 return user, msg
-            else:
-                return None, msg
-
-        except Exception as e:
-            return None, f"Lỗi: {str(e)}"
-        finally:
-            self.session.close()
+            else: return None, msg
+        except Exception as e: return None, f"Lỗi: {str(e)}"
+        finally: self.session.close()
 
     def change_password(self, user_id, old_pass, new_pass, confirm_pass):
         try:
             if new_pass != confirm_pass: return False, "❌ Mật khẩu xác nhận không khớp!"
-            if len(new_pass) < 6: return False, "⚠️ Mật khẩu quá ngắn."
+            
+            # 👇 ĐÃ XÓA RÀNG BUỘC ĐỘ DÀI > 6 KÝ TỰ THEO YÊU CẦU
+            if not new_pass: return False, "⚠️ Mật khẩu mới không được để trống."
 
             user = self.session.query(Account).filter_by(userID=user_id).first()
             if not user: return False, "Tài khoản không tồn tại."
 
             hashed_old = self._hash_password(old_pass)
-            is_valid_old = False
+            hashed_new = self._hash_password(new_pass) # Hash pass mới để so sánh
             
+            is_valid_old = False
             if len(user.password) < 60:
                 if user.password == old_pass: is_valid_old = True
             else:
                 if user.password == hashed_old: is_valid_old = True
             
-            if is_valid_old:
-                user.password = self._hash_password(new_pass)
-                self.session.commit()
-                return True, "✅ Đổi mật khẩu thành công!"
-            return False, "❌ Mật khẩu cũ không đúng!"
+            if not is_valid_old: return False, "❌ Mật khẩu cũ không đúng!"
+
+            # 👇 KIỂM TRA TRÙNG MẬT KHẨU CŨ
+            if len(user.password) < 60: # Nếu đang dùng pass thường
+                if new_pass == user.password: return False, "⚠️ Mật khẩu mới không được trùng mật khẩu cũ!"
+            else: # Nếu đang dùng pass hash
+                if hashed_new == user.password: return False, "⚠️ Mật khẩu mới không được trùng mật khẩu cũ!"
+
+            user.password = hashed_new
+            self.session.commit()
+            return True, "✅ Đổi mật khẩu thành công!"
+            
         finally: self.session.close()
 
+    # ... (Các hàm send_email_otp, recover_password, reset_password_with_otp giữ nguyên như cũ)
     def send_email_otp(self, receiver_email, otp_code):
         msg = MIMEText(f"Mã OTP của bạn là: {otp_code}\nCó hiệu lực trong 5 phút.")
         msg['Subject'] = "🔐 Mã xác thực OTP - EduSoft"
