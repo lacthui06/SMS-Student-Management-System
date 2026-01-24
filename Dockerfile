@@ -19,4 +19,4 @@ EXPOSE 8501
 
 # 6. Chạy ứng dụng
 CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
-git branch
+
