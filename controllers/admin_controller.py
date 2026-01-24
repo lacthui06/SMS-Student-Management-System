@@ -1,184 +1,245 @@
 import pandas as pd
-import streamlit as st
-from core.database import MockDatabase
-from core.models import Section, Course, Semester, GradeReviewRequest # Import đủ
+from sqlalchemy import or_
+from core.database import Session
+from core.models_orm import (
+    Account, Student, Lecturer, Admin, 
+    Semester, Major, Course, CourseSection, GradeReport
+)
+from core.utils import get_time_string
 
 class AdminController:
     def __init__(self):
-        self.db = MockDatabase()
+        self.session = Session()
+
+    def __del__(self):
+        self.session.close()
 
     def get_stats(self):
-        users = st.session_state.get('users', {})
-        courses = st.session_state.get('courses', {})
-        sections = st.session_state.get('sections', [])
-        semesters = st.session_state.get('semesters', [])
-        
-        return {
-            "users": len(users),
-            "courses": len(courses),
-            "sections": len(sections),
-            "semesters": len(semesters)
-        }
+        try:
+            return {
+                "users": self.session.query(User).count(),
+                "courses": self.session.query(Course).count(),
+                "sections": self.session.query(CourseSection).count(),
+                "semesters": self.session.query(Semester).count()
+            }
+        except Exception:
+            return {"users": 0, "courses": 0, "sections": 0, "semesters": 0}
 
-    # --- HÀM HỖ TRỢ VIEW ---
-    def get_all_semesters(self):
-        # Trả về list object để view xử lý
-        return st.session_state.get('semesters', [])
+    # --- UC 13: IMPORT USERS ---
+    def preview_import_users(self, uploaded_file):
+        if uploaded_file is None: return None
+        try:
+            if uploaded_file.name.endswith('.csv'): df = pd.read_csv(uploaded_file)
+            else: df = pd.read_excel(uploaded_file)
+            return df
+        except Exception: return None
 
-    def get_all_sections(self):
-        # Convert list object thành list dict để hiển thị bảng
-        sections = st.session_state.get('sections', [])
-        if not sections: return []
-        return [vars(s) for s in sections]
-    
-    def get_all_users(self):
-        return st.session_state.get('users', {}).values()
+    def save_import_users(self, df):
+        count = 0
+        try:
+            for index, row in df.iterrows():
+                uid = str(row['UserID'])
+                existing_user = self.session.query(User).filter_by(userID=uid).first()
+                if existing_user: continue
 
-    def get_all_courses(self):
-        return st.session_state.get('courses', {})
+                new_u = None
+                if row['Role'] == 'Student':
+                    new_u = Student(userID=uid, password=str(row['Password']), fullName=row['FullName'], email=row['Email'])
+                elif row['Role'] == 'Lecturer':
+                    new_u = Lecturer(userID=uid, password=str(row['Password']), fullName=row['FullName'], email=row['Email'])
+                
+                if new_u:
+                    self.session.add(new_u)
+                    count += 1
+            self.session.commit()
+            return True, f"Import thành công {count} tài khoản."
+        except Exception as e:
+            self.session.rollback()
+            return False, f"Lỗi Import: {str(e)}"
 
-    # -------- UC: MANAGE SEMESTER ----------
-    def add_semester(self, sem_id, name, start, end):
-        if not sem_id or not name: return False, "Thiếu thông tin"
-        
-        current_sems = st.session_state.get('semesters', [])
-        
-        # Kiểm tra trùng ID (Dùng cú pháp Object .semesterID)
-        if any(s.semesterID == sem_id for s in current_sems):
-            return False, "Trùng mã HK"
-            
-        new_sem = Semester(sem_id, name, str(start), str(end))
-        current_sems.append(new_sem)
-        return True, "Thêm thành công"
+    # --- UC 14: LOCK USER ---
+    def get_users_filtered(self, search_term=""):
+        query = self.session.query(User)
+        if search_term:
+            term = f"%{search_term.strip()}%"
+            query = query.filter(or_(User.userID.like(term), User.fullName.like(term)))
+        return query.all()
 
-    def update_semester(self, sem_id, start, end):
-        semesters = st.session_state.get('semesters', [])
-        for s in semesters:
-            # Sửa lỗi: Truy cập bằng .semesterID thay vì ['semesterID']
-            if s.semesterID == sem_id:
-                s.startDate = str(start)
-                s.endDate = str(end)
-                return True, "Cập nhật học kỳ thành công"
-        return False, "Không tìm thấy học kỳ"
-
-    def delete_semester(self, sem_id):
-        semesters = st.session_state.get('semesters', [])
-        for i, s in enumerate(semesters):
-            if s.semesterID == sem_id:
-                del semesters[i]
-                return True, "Xóa học kỳ thành công"
-        return False, "Không tìm thấy học kỳ"
-
-    # -------- UC: MANAGE COURSE ----------
-    def add_course(self, cid, cname, credits):
-        courses = st.session_state.get('courses', {})
-        if cid in courses: return False, "Trùng mã môn"
-        new_c = Course(cid, cname, credits)
-        st.session_state['courses'][cid] = new_c
-        return True, "Thêm môn thành công"
-
-    def update_course(self, cid, name=None, credits=None):
-        courses = st.session_state.get('courses', {})
-        if cid not in courses:
-            return False, "Không tìm thấy môn học"
-
-        course = courses[cid]
-        if name is not None:
-            course.courseName = name # Sửa attribute name cho khớp model
-        if credits is not None:
-            course.credits = credits
-
-        return True, "Cập nhật môn học thành công"
-
-    def delete_course(self, cid):
-        courses = st.session_state.get('courses', {})
-        if cid not in courses:
-            return False, "Không tìm thấy môn học"
-        del courses[cid]
-        return True, "Xóa môn học thành công"
-
-    # -------- UC: MANAGE SECTION ----------
-    def add_section(self, sid, cid, lid, sem_id, room, day, p1, p2):
-        # Hàm này dùng chung logic tạo section
-        return self.create_section_with_semester(sid, cid, lid, sem_id, room, day, p1, p2)
-
-    def create_section_with_semester(self, sid, cid, lid, semester_id, room, day, p1, p2):
-        sections = st.session_state.get('sections', [])
-        if any(s.sectionID == sid for s in sections):
-            return False, "Trùng mã lớp học phần"
-        
-        # Tạo object Section thay vì dict
-        new_sec = Section(sid, cid, lid, semester_id, room, day, p1, p2)
-        sections.append(new_sec)
-        return True, "Tạo lớp học phần thành công"
-
-    def update_section(self, section_id, room=None, day=None, p1=None, p2=None):
-        sections = st.session_state.get('sections', [])
-        for s in sections:
-            if s.sectionID == section_id:
-                if room is not None: s.room = room
-                if day is not None: s.dayOfWeek = day # Sửa lại cho khớp model (dayOfWeek)
-                if p1 is not None: s.startPeriod = p1 # Sửa lại cho khớp model
-                if p2 is not None: s.endPeriod = p2   # Sửa lại cho khớp model
-                return True, "Cập nhật lớp học phần thành công"
-        return False, "Không tìm thấy lớp học phần"
-
-    def cancel_section(self, section_id):
-        sections = st.session_state.get('sections', [])
-        for s in sections:
-            if s.sectionID == section_id:
-                # Lưu ý: Class Section trong model chưa có thuộc tính status
-                # Cần đảm bảo model Section có field này hoặc thêm động
-                s.status = "CANCELED" 
-                return True, "Hủy lớp thành công"
-        return False, "Không tìm thấy lớp học phần"
-
-    # -------- UC: LOCK / UNLOCK USER ----------
     def lock_user(self, user_id, reason):
-        users = st.session_state.get('users', {})
-        if user_id not in users:
-            return False, "Không tìm thấy người dùng"
-        
-        # Sửa lỗi: Truy cập attribute object thay vì dict ['key']
-        users[user_id].status = False # False = Locked
-        # users[user_id].lock_reason = reason # (Model chưa có field này, tạm ẩn để không lỗi)
-        return True, "Khóa tài khoản thành công"
+        if not reason or not reason.strip(): return False, "Vui lòng nhập lý do."
+        try:
+            user = self.session.query(User).get(user_id)
+            if user:
+                user.status = False
+                self.session.commit()
+                return True, "Đã khóa tài khoản."
+            return False, "Không tìm thấy user."
+        except Exception as e:
+            return False, str(e)
 
     def unlock_user(self, user_id):
-        users = st.session_state.get('users', {})
-        if user_id not in users:
-            return False, "Không tìm thấy người dùng"
-        
-        users[user_id].status = True # True = Active
-        return True, "Mở khóa tài khoản thành công"
+        try:
+            user = self.session.query(User).get(user_id)
+            if user:
+                user.status = True
+                self.session.commit()
+                return True, "Đã mở khóa."
+            return False, "Không tìm thấy."
+        except Exception as e:
+            return False, str(e)
 
-    # -------- UC: MANAGE CURRICULUM ----------
-    def add_curriculum_item(self, major, course_id, semester_no, required=True):
-        curriculum = st.session_state.get('curriculum', [])
-        curriculum.append({
-            "major": major,
-            "courseID": course_id,
-            "semester": semester_no,
-            "required": required
-        })
-        st.session_state['curriculum'] = curriculum
-        return True, "Thêm môn vào khung chương trình thành công"
+    # --- QUẢN LÝ HỌC KỲ ---
+    def get_all_semesters(self):
+        return self.session.query(Semester).all()
 
-    def get_curriculum(self, major=None):
-        curriculum = st.session_state.get('curriculum', [])
-        if major:
-            curriculum = [c for c in curriculum if c['major'] == major]
-        return pd.DataFrame(curriculum)
+    def add_semester(self, sem_id, name, start, end):
+        if start >= end: return False, "Ngày kết thúc phải sau ngày bắt đầu."
+        try:
+            if self.session.query(Semester).get(sem_id): return False, "Mã HK đã tồn tại."
+            new_sem = Semester(semesterID=sem_id, name=name, startDate=start, endDate=end)
+            self.session.add(new_sem)
+            self.session.commit()
+            return True, "Thêm học kỳ thành công."
+        except Exception as e:
+            return False, str(e)
 
-    def remove_curriculum_item(self, major, course_id):
-        curriculum = st.session_state.get('curriculum', [])
-        for c in curriculum:
-            if c['major'] == major and c['courseID'] == course_id:
-                curriculum.remove(c)
-                return True, "Xóa môn khỏi khung chương trình thành công"
-        return False, "Không tìm thấy môn trong khung chương trình"
+    # --- QUẢN LÝ MÔN HỌC & NGÀNH ---
+    def get_all_courses(self):
+        courses = self.session.query(Course).all()
+        return {c.courseID: c for c in courses}
 
-    # -------- EXTENSION: IMPORT BATCH ----------
-    def import_users_batch(self, df):
-        # Demo function
-        return True, "Import (Demo) thành công"
+    def get_all_majors(self):
+        return self.session.query(Major).all()
+    
+    def get_all_lecturers(self):
+        return self.session.query(Lecturer).all()
+
+    def add_course(self, cid, cname, credits, major_id):
+        # 👇 THÊM CÁC DÒNG KIỂM TRA NÀY
+        if not cid or len(cid.strip()) == 0:
+            return False, "❌ Mã môn học không được để trống!"
+        if not cname or len(cname.strip()) == 0:
+            return False, "❌ Tên môn học không được để trống!"
+        if credits <= 0:
+            return False, "❌ Số tín chỉ phải lớn hơn 0!"
+            
+        try:
+            if self.session.query(Course).get(cid): 
+                return False, "❌ Mã môn học đã tồn tại!"
+            
+            new_c = Course(courseID=cid, courseName=cname, credits=credits, majorID=major_id)
+            self.session.add(new_c)
+            self.session.commit()
+            return True, "✅ Thêm môn học thành công!"
+        except Exception as e:
+            self.session.rollback()
+            return False, str(e)
+
+    def delete_course(self, cid):
+        try:
+            c = self.session.query(Course).get(cid)
+            if c:
+                self.session.delete(c)
+                self.session.commit()
+                return True, "Đã xóa môn học thành công."
+            return False, "Không tìm thấy môn học."
+        except Exception:
+            return False, "Không thể xóa do có dữ liệu liên quan (lớp học phần/điểm)."
+
+    # --- QUẢN LÝ LỚP HỌC PHẦN ---
+    def get_all_sections(self):
+        secs = self.session.query(CourseSection).all()
+        data = []
+        for s in secs:
+            # Convert sang dict và format lại dữ liệu cho View
+            data.append({
+                "Mã lớp": s.sectionID,
+                "Môn học": s.courseID,
+                "Giảng viên": s.lecturerID,
+                "Phòng": s.room,
+                "Thứ": s.dayOfWeek,
+                # Gọi hàm get_time_string để hiện giờ thay vì tiết số
+                "Thời gian": get_time_string(s.startPeriod, s.endPeriod) 
+            })
+        return data
+
+    def cancel_section(self, sid):
+        try:
+            s = self.session.query(CourseSection).get(sid)
+            if s:
+                self.session.delete(s)
+                self.session.commit()
+                return True, "Đã hủy lớp học phần thành công."
+            return False, "Không tìm thấy lớp học phần."
+        except Exception as e:
+            return False, str(e)
+
+    def create_section_auto_enroll(self, sid, cid, lid, sem, room, day, p1, p2, max_slot, target_major):
+        # 1. VALIDATION CƠ BẢN
+        if not sid or not sid.strip(): return False, "❌ Mã lớp trống!"
+        if not room or not room.strip(): return False, "❌ Phòng trống!"
+        if p1 >= p2: return False, "❌ Tiết BĐ phải nhỏ hơn Tiết KT!"
+
+        try:
+            # 2. KIỂM TRA TRÙNG MÃ LỚP
+            if self.session.query(CourseSection).get(sid): 
+                return False, f"❌ Lỗi: Mã lớp '{sid}' đã tồn tại."
+
+            # 3. 👇 CHECK TRÙNG LỊCH HỌC (QUAN TRỌNG)
+            # Tìm các lớp cùng Học kỳ, cùng Phòng, cùng Thứ
+            conflicts = self.session.query(CourseSection).filter(
+                CourseSection.semesterID == sem,
+                CourseSection.room == room,
+                CourseSection.dayOfWeek == day
+            ).all()
+
+            for c in conflicts:
+                # Công thức check giao nhau: (StartA <= EndB) và (EndA >= StartB)
+                if (p1 <= c.endPeriod) and (p2 >= c.startPeriod):
+                    return False, f"❌ Trùng lịch! Phòng {room} đã có lớp {c.sectionID} học tiết {c.startPeriod}-{c.endPeriod}."
+
+            # 4. KIỂM TRA SỐ LƯỢNG SINH VIÊN TRƯỚC
+            candidates = self.session.query(Student)\
+                .filter_by(majorID=target_major)\
+                .order_by(Student.fullName.asc())\
+                .limit(max_slot).all()
+
+            if not candidates:
+                return False, f"⚠️ Không tìm thấy sinh viên nào thuộc ngành '{target_major}' để xếp lớp! Vui lòng kiểm tra lại Data."
+
+            # 5. TẠO LỚP (Nếu mọi thứ OK)
+            new_sec = CourseSection(
+                sectionID=sid, courseID=cid, lecturerID=lid, semesterID=sem,
+                room=room, dayOfWeek=day, startPeriod=p1, endPeriod=p2, maxSlot=max_slot,
+                currentSlot=len(candidates), status=1
+            )
+            self.session.add(new_sec)
+            
+            # 6. XẾP SINH VIÊN VÀO
+            count = 0
+            for stu in candidates:
+                reg = GradeReport(studentID=stu.studentID, sectionID=sid, midterm=0, final=0)
+                self.session.add(reg)
+                count += 1
+            
+            self.session.commit()
+            return True, f"✅ Thành công! Tạo lớp {sid} và xếp {count} SV ngành {target_major}."
+
+        except Exception as e:
+            self.session.rollback()
+            return False, f"Lỗi hệ thống: {str(e)}"
+
+    # --- UC 18: KHUNG CHƯƠNG TRÌNH (CÁCH A: LẤY TỪ COURSE) ---
+    def get_curriculum(self, major_id):
+        # Lấy môn học trực tiếp từ bảng Course dựa trên majorID
+        data = self.session.query(Course).filter_by(majorID=major_id).all()
+        # Chuyển đổi thành DataFrame để hiển thị
+        result = []
+        for c in data:
+            result.append({
+                "courseID": c.courseID,
+                "courseName": c.courseName,
+                "credits": c.credits,
+                "required": True
+            })
+        return pd.DataFrame(result)

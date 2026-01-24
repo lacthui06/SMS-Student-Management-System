@@ -1,5 +1,6 @@
-create database gr2;
-use gr2;
+DROP DATABASE IF EXISTS gr2;
+CREATE DATABASE gr2 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE gr2;
 
 create table Account (
     userID char(12) primary key,
@@ -84,11 +85,14 @@ create table Course(
 
 create table CourseSection(
     sectionID char(11) primary key,
-    lecturerID char(12), -- Đã sửa từ 11 thành 12
+    lecturerID char(12),
     courseID char(11),
     semesterID char(10),
     sectionName varchar(100),
     room varchar(50),
+    dayOfWeek varchar(20), -- Thêm: Thứ (2, 3, 4...)
+    startPeriod integer,   -- Thêm: Tiết bắt đầu
+    endPeriod integer,     -- Thêm: Tiết kết thúc
     maxSlot integer,
     currentSlot integer,
     status integer,
@@ -225,11 +229,11 @@ INSERT INTO Course VALUES
 ('C01','M01','Cơ sở dữ liệu',3,'Môn học cơ bản về CSDL');
 
 INSERT INTO CourseSection VALUES
-('S01','GV01','C01','HK1','Lớp 01','A101',25,0,1),
-('S02','GV02','C01','HK1','Lớp 02','A102',25,0,1),
-('S03','GV03','C01','HK2','Lớp 03','B201',25,0,1),
-('S04','GV04','C01','HK2','Lớp 04','B202',25,0,1),
-('S05','GV05','C01','HK3','Lớp 05','C301',25,0,1);
+('S01','GV01','C01','HK1','Lớp 01','A101', 'Thứ 2', 1, 3, 25, 0, 1),
+('S02','GV02','C01','HK1','Lớp 02','A102', 'Thứ 4', 4, 6, 25, 0, 1),
+('S03','GV03','C01','HK2','Lớp 03','B201', 'Thứ 6', 7, 9, 25, 0, 1),
+('S04','GV04','C01','HK2','Lớp 04','B202', 'Thứ 3', 1, 3, 25, 0, 1),
+('S05','GV05','C01','HK3','Lớp 05','C301', 'Thứ 5', 10, 12, 25, 0, 1);
 
 INSERT INTO Student VALUES
 ('SV001','SV001','M01','Nguyễn Văn An','2004-01-10','TP.HCM','0910000001','sv01@sv.edu.vn',1,'TP.HCM','111111111001'),
@@ -452,3 +456,163 @@ SET componentGrade=7
 WHERE sectionID='S05' AND studentID IN
 ('SV102','SV109','SV111','SV112','SV113','SV114','SV115',
  'SV116','SV117','SV118','SV119','SV120');
+
+USE gr2;
+
+-- BƯỚC 1: Tắt kiểm tra khóa ngoại để dọn dẹp dữ liệu cũ (nếu cần)
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE Course;
+TRUNCATE TABLE Major; -- Xóa cả ngành cũ làm lại cho sạch
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- BƯỚC 2: Tạo danh sách Ngành trước (BẮT BUỘC)
+INSERT INTO Major (majorID, majorName) VALUES 
+('SE', 'Kỹ thuật phần mềm'),
+('AI', 'Trí tuệ nhân tạo'),
+('IS', 'An toàn thông tin'),
+('IT', 'Công nghệ thông tin'),
+('CS', 'Khoa học máy tính');
+
+-- Ngành SE (Software Engineering) - Tổng ~120 tín chỉ
+INSERT INTO Course (courseID, majorID, courseName, credits) VALUES 
+('SE01', 'SE', 'Nhập môn kỹ thuật phần mềm', 3), ('SE02', 'SE', 'Cấu trúc dữ liệu và giải thuật', 4),
+('SE03', 'SE', 'Cơ sở dữ liệu', 3), ('SE04', 'SE', 'Lập trình hướng đối tượng', 4),
+('SE05', 'SE', 'Phân tích thiết kế hệ thống', 3), ('SE06', 'SE', 'Kiểm thử phần mềm', 3),
+('SE07', 'SE', 'Quản lý dự án phần mềm', 3), ('SE08', 'SE', 'Lập trình Web', 4),
+('SE09', 'SE', 'Lập trình di động', 4), ('SE10', 'SE', 'Đồ án chuyên ngành', 10);
+-- (Bạn lặp lại tương tự cho đến khi đủ ~35 môn mỗi ngành để đạt 120 tín)
+
+-- Ngành AI (Artificial Intelligence)
+INSERT INTO Course (courseID, majorID, courseName, credits) VALUES 
+('AI01', 'AI', 'Toán rời rạc', 3), ('AI02', 'AI', 'Xác suất thống kê', 3),
+('AI03', 'AI', 'Học máy cơ bản', 4), ('AI04', 'AI', 'Xử lý ngôn ngữ tự nhiên', 4),
+('AI05', 'AI', 'Thị giác máy tính', 4), ('AI06', 'AI', 'Mạng nơ-ron sâu', 4);
+
+USE gr2;
+
+-- =================================================================
+-- 1. THÊM NGÀNH (Dùng IGNORE để nếu có 'SE' rồi thì tự bỏ qua)
+-- =================================================================
+INSERT IGNORE INTO Major (majorID, facultyID, majorName, requiredCredits, tuitionFeePerCredit) VALUES 
+('SE', 'F01', 'Kỹ thuật phần mềm', 120, 450000),
+('AI', 'F01', 'Trí tuệ nhân tạo', 120, 450000),
+('IS', 'F01', 'An toàn thông tin', 120, 450000),
+('IT', 'F01', 'Công nghệ thông tin', 120, 450000),
+('CS', 'F01', 'Khoa học máy tính', 120, 450000);
+
+-- =================================================================
+-- 2. THÊM LỚP HỌC PHẦN (Kết nối Lịch dạy cho GV)
+-- =================================================================
+-- Lớp SE01 - Nhập môn KTPM (Thứ 2)
+INSERT IGNORE INTO CourseSection (sectionID, lecturerID, courseID, semesterID, sectionName, room, dayOfWeek, startPeriod, endPeriod, maxSlot, currentSlot, status) VALUES 
+('Lop_Test_01', 'GV01', 'SE01', 'HK1', 'KTPM_01', 'P301', 'Thứ 2', 1, 3, 30, 2, 1);
+
+-- Lớp SE02 - Cấu trúc dữ liệu (Thứ 4)
+INSERT IGNORE INTO CourseSection (sectionID, lecturerID, courseID, semesterID, sectionName, room, dayOfWeek, startPeriod, endPeriod, maxSlot, currentSlot, status) VALUES 
+('Lop_Test_02', 'GV01', 'SE02', 'HK1', 'CTDL_01', 'P302', 'Thứ 4', 7, 9, 30, 5, 1);
+
+-- =================================================================
+-- 3. XẾP SINH VIÊN VÀO LỚP (Kết nối Lịch học & Bảng điểm cho SV)
+-- =================================================================
+-- Đảm bảo SV001 có trong DB (Nếu chưa có thì thêm, có rồi thì thôi)
+INSERT IGNORE INTO Student (studentID, userID, majorID, fullName) VALUES ('SV001', 'SV001', 'SE', 'Nguyễn Văn Test');
+
+-- Xếp SV001 vào học 2 lớp trên
+INSERT IGNORE INTO GradeReport (studentID, sectionID, componentGrade, finalScore, totalScore, letterGrade) VALUES 
+('SV001', 'Lop_Test_01', NULL, NULL, NULL, NULL), -- Mới học
+('SV001', 'Lop_Test_02', 7.5, 8.0, 7.9, 'B');     -- Đã có điểm
+
+
+USE gr2;
+
+-- 1. Đảm bảo có Ngành CS (Khoa học máy tính) để hiện Khung chương trình
+INSERT IGNORE INTO Major (majorID, facultyID, majorName, requiredCredits, tuitionFeePerCredit) VALUES 
+('CS', 'F01', 'Khoa học máy tính', 120, 450000);
+
+-- 2. Thêm vài môn cho ngành CS
+INSERT IGNORE INTO Course (courseID, majorID, courseName, credits) VALUES 
+('CS01', 'CS', 'Nhập môn CS', 3),
+('CS02', 'CS', 'Trí tuệ nhân tạo cơ bản', 3);
+
+-- 3. TẠO LỚP HỌC (Để GV thấy chỗ nhập điểm)
+-- Giả sử GV01 dạy môn SE01
+INSERT IGNORE INTO CourseSection (sectionID, lecturerID, courseID, semesterID, sectionName, room, dayOfWeek, startPeriod, endPeriod, maxSlot, currentSlot, status) VALUES 
+('Lop_SE01', 'GV01', 'SE01', 'HK1', 'Lớp KTPM 01', 'A101', 'Thứ 2', 1, 3, 30, 0, 1);
+
+-- 4. XẾP SINH VIÊN VÀO LỚP (Để SV thấy Lịch học & Bảng điểm)
+-- Giả sử SV001 học lớp SE01 ở trên
+INSERT IGNORE INTO GradeReport (studentID, sectionID, componentGrade, finalScore, totalScore, letterGrade) VALUES 
+('SV001', 'Lop_SE01', 0, 0, 0, 'F');
+
+
+USE gr2;
+
+-- Thêm 10 sinh viên mẫu thuộc ngành AI (Trí tuệ nhân tạo)
+INSERT IGNORE INTO Student (studentID, userID, majorID, fullName, email) VALUES 
+('SV_AI_01', 'SV_AI_01', 'AI', 'An Trí Tuệ', 'ai01@fpt.edu.vn'),
+('SV_AI_02', 'SV_AI_02', 'AI', 'Bình Machine', 'ai02@fpt.edu.vn'),
+('SV_AI_03', 'SV_AI_03', 'AI', 'Cường Neural', 'ai03@fpt.edu.vn'),
+('SV_AI_04', 'SV_AI_04', 'AI', 'Dũng Deep', 'ai04@fpt.edu.vn'),
+('SV_AI_05', 'SV_AI_05', 'AI', 'Em Python', 'ai05@fpt.edu.vn'),
+('SV_AI_06', 'SV_AI_06', 'AI', 'Giang Data', 'ai06@fpt.edu.vn'),
+('SV_AI_07', 'SV_AI_07', 'AI', 'Hương Vision', 'ai07@fpt.edu.vn'),
+('SV_AI_08', 'SV_AI_08', 'AI', 'Khánh Robot', 'ai08@fpt.edu.vn'),
+('SV_AI_09', 'SV_AI_09', 'AI', 'Lan Logic', 'ai09@fpt.edu.vn'),
+('SV_AI_10', 'SV_AI_10', 'AI', 'Minh Model', 'ai10@fpt.edu.vn');
+
+-- Tạo tài khoản đăng nhập cho họ luôn (Pass: 123)
+INSERT IGNORE INTO Account (userID, passWord, role, status) VALUES 
+('SV_AI_01', '123', 'STUDENT', 1), ('SV_AI_02', '123', 'STUDENT', 1),
+('SV_AI_03', '123', 'STUDENT', 1), ('SV_AI_04', '123', 'STUDENT', 1),
+('SV_AI_05', '123', 'STUDENT', 1), ('SV_AI_06', '123', 'STUDENT', 1),
+('SV_AI_07', '123', 'STUDENT', 1), ('SV_AI_08', '123', 'STUDENT', 1),
+('SV_AI_09', '123', 'STUDENT', 1), ('SV_AI_10', '123', 'STUDENT', 1);
+
+INSERT IGNORE INTO Major (majorID, facultyID, majorName, requiredCredits, tuitionFeePerCredit) 
+VALUES ('AI', 'F01', 'Trí tuệ nhân tạo', 120, 450000);
+
+-- 2. XÓA các sinh viên AI cũ (để tránh bị lỗi trùng ID mà không cập nhật được)
+DELETE FROM GradeReport WHERE studentID LIKE 'SV_AI_%'; -- Xóa điểm/lớp cũ của họ trước
+DELETE FROM Student WHERE studentID LIKE 'SV_AI_%';     -- Xóa sinh viên
+DELETE FROM Account WHERE userID LIKE 'SV_AI_%';        -- Xóa tài khoản
+
+-- 3. CHÈN LẠI MỚI (Lần này chắc chắn sẽ vào đúng ngành AI)
+INSERT INTO Account (userID, passWord, role, status) VALUES 
+('SV_AI_01', '123', 'STUDENT', 1), ('SV_AI_02', '123', 'STUDENT', 1),
+('SV_AI_03', '123', 'STUDENT', 1), ('SV_AI_04', '123', 'STUDENT', 1),
+('SV_AI_05', '123', 'STUDENT', 1), ('SV_AI_06', '123', 'STUDENT', 1),
+('SV_AI_07', '123', 'STUDENT', 1), ('SV_AI_08', '123', 'STUDENT', 1),
+('SV_AI_09', '123', 'STUDENT', 1), ('SV_AI_10', '123', 'STUDENT', 1);
+
+INSERT INTO Student (studentID, userID, majorID, fullName, email) VALUES 
+('SV_AI_01', 'SV_AI_01', 'AI', 'An Trí Tuệ', 'ai01@fpt.edu.vn'),
+('SV_AI_02', 'SV_AI_02', 'AI', 'Bình Machine', 'ai02@fpt.edu.vn'),
+('SV_AI_03', 'SV_AI_03', 'AI', 'Cường Neural', 'ai03@fpt.edu.vn'),
+('SV_AI_04', 'SV_AI_04', 'AI', 'Dũng Deep', 'ai04@fpt.edu.vn'),
+('SV_AI_05', 'SV_AI_05', 'AI', 'Em Python', 'ai05@fpt.edu.vn'),
+('SV_AI_06', 'SV_AI_06', 'AI', 'Giang Data', 'ai06@fpt.edu.vn'),
+('SV_AI_07', 'SV_AI_07', 'AI', 'Hương Vision', 'ai07@fpt.edu.vn'),
+('SV_AI_08', 'SV_AI_08', 'AI', 'Khánh Robot', 'ai08@fpt.edu.vn'),
+('SV_AI_09', 'SV_AI_09', 'AI', 'Lan Logic', 'ai09@fpt.edu.vn'),
+('SV_AI_10', 'SV_AI_10', 'AI', 'Minh Model', 'ai10@fpt.edu.vn');
+SELECT * FROM Student WHERE majorID = 'AI';
+
+
+-- Tắt kiểm tra khóa ngoại để xóa cho mượt
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- 1. Xóa sạch lịch sử yêu cầu phúc khảo
+TRUNCATE TABLE GradeReviewRequest;
+
+-- 2. (Tùy chọn) Reset lại điểm của sinh viên về trạng thái ban đầu để test lại từ đầu
+-- Ví dụ: Reset điểm của SV_AI_01 trong lớp Lop_Test_AI về 5.0
+UPDATE GradeReport 
+SET componentGrade = 5.0, finalScore = 5.0, totalScore = 5.0, letterGrade = 'D'
+WHERE studentID = 'SV_AI_01' AND sectionID = 'Lop_Test_AI';
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- Xóa bớt các đăng ký môn bị trùng (chỉ giữ lại cái có điểm, xóa cái điểm NULL)
+DELETE FROM GradeReport 
+WHERE studentID = 'SV001' 
+AND totalScore IS NULL; -- Xóa dòng nào chưa có điểm tổng kết

@@ -1,131 +1,235 @@
-import streamlit as st
+from sqlalchemy import desc
+import pandas as pd
 import re
-from core.database import MockDatabase
-from core.models import GradeReviewRequest
-from core.utils import calculate_total, to_letter_grade, get_time_string
 from datetime import date
+import time # Import time ở đây để dùng chung
+from core.database import Session
+from core.utils import get_time_string 
+from core.models_orm import (
+    Student, Major, GradeReport, 
+    CourseSection, Course, Lecturer, GradeReviewRequest, Semester
+)
 
 class StudentController:
-    def __init__(self, student_id):
-        self.db = MockDatabase()
-        self.student = self.db.get_user(student_id)
+    def __init__(self, student_id=None):
+        self.db = Session() # Biến kết nối là self.db
+        self.student_id = student_id
 
-    # ... (Các hàm update_contact_info, v.v. giữ nguyên) ...
-    def update_contact_info(self, phone, email, address):
-        if not phone or not email or not address:
-            return False, "❌ Vui lòng điền đầy đủ thông tin."
-        if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", email):
-            return False, "❌ Định dạng Email không hợp lệ."
-        if not phone.isdigit() or len(phone) < 9 or len(phone) > 11:
-            return False, "❌ Số điện thoại phải là dãy số từ 9-11 chữ số."
+    # 1. LẤY BẢNG ĐIỂM
+    def get_grade_report(self, student_id):
+        try:
+            results = self.db.query(
+                Course.courseID,
+                Course.courseName,
+                Course.credits,
+                GradeReport.midterm,
+                GradeReport.final,
+                GradeReport.total,
+                GradeReport.letterGrade
+            ).join(CourseSection, GradeReport.sectionID == CourseSection.sectionID)\
+             .join(Course, CourseSection.courseID == Course.courseID)\
+             .filter(GradeReport.studentID == student_id).all()
+            
+            if not results:
+                return None
 
-        self.student.phone = phone
-        self.student.email = email
-        self.student.address = address
-        return True, "✅ Cập nhật hồ sơ thành công!"
+            df = pd.DataFrame(results, columns=[
+                "Mã MH", "Tên Môn Học", "TC", 
+                "Điểm QT", "Điểm Cuối Kỳ", "Tổng Kết", "Điểm Chữ"
+            ])
+            return df
+        finally:
+            self.db.close()
 
-    # UC6: View Academic Progress (ĐÃ CẬP NHẬT THÊM MÃ HP & SECTION ID)
-    def get_progress_data(self):
-        major = self.db.get_major(self.student.majorID)
-        grades = self.db.get_student_grades(self.student.userID)
-        
-        accumulated = 0
-        passed_courses = []
-        
-        for g in grades:
-            total = calculate_total(g.componentGrade, g.finalScore)
-            # Môn học được tính là Đạt nếu điểm >= 4.0
-            if total is not None and total >= 4.0:
-                sec = self.db.get_section_by_id(g.sectionID)
-                course = self.db.get_course_by_id(sec.courseID)
-                accumulated += course.credits
-                
-                passed_courses.append({
-                    "Mã HP": course.courseID,   # <--- Thêm Course Code (theo đặc tả)
-                    "Mã Lớp": sec.sectionID,    # <--- Thêm Section ID (theo yêu cầu của bạn)
-                    "Tên môn": course.courseName,
-                    "Tín chỉ": course.credits,
-                    "Điểm": total,
-                    "Kết quả": "Đạt"
-                })
-                
-        return {
-            "accumulated": accumulated,
-            "required": major.requiredCredits if major else 150,
-            "percent": min(accumulated / (major.requiredCredits if major else 150), 1.0),
-            "details": passed_courses
-        }
-
-    # ... (Các hàm get_timetable, get_grade_table, ... giữ nguyên không đổi) ...
+    # 2. LẤY LỊCH HỌC
     def get_timetable(self):
-        grades = self.db.get_student_grades(self.student.userID)
-        section_ids = [g.sectionID for g in grades]
-        
-        schedule = []
-        for sec_id in section_ids:
-            sec = self.db.get_section_by_id(sec_id)
-            if sec:
-                course = self.db.get_course_by_id(sec.courseID)
-                lecturer = self.db.get_user(sec.lecturerID)
+        try:
+            classes = self.db.query(CourseSection, Course)\
+                .join(GradeReport, GradeReport.sectionID == CourseSection.sectionID)\
+                .join(Course, CourseSection.courseID == Course.courseID)\
+                .filter(GradeReport.studentID == self.student_id).all()
+            
+            data = []
+            for sec, course in classes:
+                real_time = get_time_string(sec.startPeriod, sec.endPeriod)
+                period_str = f"Tiết {sec.startPeriod} - {sec.endPeriod}"
                 
-                schedule.append({
+                data.append({
                     "Mã Lớp": sec.sectionID,
-                    "Môn học": course.courseName,
-                    "Giảng viên": lecturer.fullName,
+                    "Môn Học": course.courseName,
                     "Thứ": sec.dayOfWeek,
+                    "Ca/Tiết": period_str,
+                    "Giờ học": real_time,
                     "Phòng": sec.room,
-                    "Ca/Tiết": get_time_string(sec.startPeriod, sec.endPeriod),
+                    "Giảng viên": sec.lecturerID,
                     "_day_sort": sec.dayOfWeek,
                     "_start_sort": sec.startPeriod
                 })
-        return schedule
+            return data
+        finally:
+            self.db.close()
 
-    def get_grade_table(self):
-        raw_grades = self.db.get_student_grades(self.student.userID)
-        data = []
-        for g in raw_grades:
-            sec = self.db.get_section_by_id(g.sectionID)
-            course = self.db.get_course_by_id(sec.courseID)
-            total = calculate_total(g.componentGrade, g.finalScore)
+    # 3. LẤY TIẾN ĐỘ HỌC TẬP
+    def get_progress_data(self):
+        try:
+            student = self.db.query(Student).filter_by(studentID=self.student_id).first()
+            if not student:
+                return {"accumulated": 0, "required": 150, "details": []}
+
+            major = self.db.query(Major).filter_by(majorID=student.majorID).first()
             
-            data.append({
-                "Học kỳ": sec.semesterID,
-                "Mã HP": sec.sectionID,
-                "Tên môn": course.courseName,
-                "Tín chỉ": course.credits,
-                "Điểm QT": g.componentGrade,
-                "Điểm CK": g.finalScore,
-                "Tổng kết": total,
-                "Điểm chữ": to_letter_grade(total)
-            })
-        return data
+            all_graded_courses = self.db.query(Course.courseName, Course.credits, GradeReport.total)\
+                .join(CourseSection, GradeReport.sectionID == CourseSection.sectionID)\
+                .join(Course, CourseSection.courseID == Course.courseID)\
+                .filter(GradeReport.studentID == self.student_id)\
+                .filter(GradeReport.total != None).all()
+            
+            accumulated_credits = 0
+            details = []
 
-    def get_reviewable_courses(self):
-        grades = self.db.get_student_grades(self.student.userID)
-        my_requests = [r.sectionID for r in st.session_state['requests'] if r.studentID == self.student.userID]
+            for pc in all_graded_courses:
+                is_passed = pc.total >= 4.0
+                status = "✅ Đạt" if is_passed else "❌ Không đạt"
+                
+                if is_passed:
+                    accumulated_credits += pc.credits
+
+                details.append({
+                    "Môn học": pc.courseName,
+                    "Số tín chỉ": pc.credits,
+                    "Điểm": pc.total,
+                    "Trạng thái": status
+                })
+                
+            return {
+                "accumulated": accumulated_credits,
+                "required": major.requiredCredits if major else 150,
+                "details": details
+            }
+        finally:
+            self.db.close()
+
+    # 4. CẬP NHẬT THÔNG TIN LIÊN HỆ
+    def update_contact_info(self, phone, email, address):
+        if not phone or not email or not address:
+            return False, "⚠️ Vui lòng điền đầy đủ thông tin!"
+
+        email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+        if not re.match(email_pattern, email):
+            return False, "⚠️ Định dạng Email không hợp lệ!"
+
+        if not phone.isdigit() or len(phone) < 10 or len(phone) > 11:
+            return False, "⚠️ Số điện thoại không hợp lệ!"
         
-        eligible = []
-        for g in grades:
-            if g.finalScore is not None and g.sectionID not in my_requests:
-                sec = self.db.get_section_by_id(g.sectionID)
-                course = self.db.get_course_by_id(sec.courseID)
-                eligible.append(f"{g.sectionID} - {course.courseName}")
-        return eligible
+        try:
+            student = self.db.query(Student).filter_by(studentID=self.student_id).first()
+            if student:
+                student.phone = phone
+                student.email = email
+                student.address = address
+                self.db.commit()
+                return True, "✅ Cập nhật thành công!"
+            return False, "❌ Không tìm thấy hồ sơ."
+        except Exception as e:
+            self.db.rollback()
+            return False, f"Lỗi: {str(e)}"
+        finally:
+            self.db.close()
 
-    def create_review_request(self, section_str, reason):
-        section_id = section_str.split(" - ")[0]
-        req_id = f"REQ{len(st.session_state['requests']) + 1:03d}"
-        new_req = GradeReviewRequest(
-            requestID=req_id,
-            studentID=self.student.userID,
-            sectionID=section_id,
-            reason=reason,
-            createDate=str(date.today()),
-            status="Pending",
-            reply=""
-        )
-        st.session_state['requests'].append(new_req)
-        return True, "Gửi yêu cầu thành công!"
-    
-    def get_my_requests(self):
-        return [r for r in st.session_state['requests'] if r.studentID == self.student.userID]
+    # 5. LẤY BẢNG ĐIỂM (Dict)
+    def get_grade_table(self):
+        df = self.get_grade_report(self.student_id)
+        if df is not None:
+            return df.to_dict('records')
+        return []
+
+    # 6. LẤY MÔN ĐỦ ĐIỀU KIỆN PHÚC KHẢO
+    def get_reviewable_courses(self):
+        try:
+            courses = self.db.query(CourseSection.sectionID, Course.courseName)\
+                .join(GradeReport, GradeReport.sectionID == CourseSection.sectionID)\
+                .join(Course, CourseSection.courseID == Course.courseID)\
+                .filter(GradeReport.studentID == self.student_id).all()
+            return courses
+        finally:
+            self.db.close()
+
+    # 7. TẠO YÊU CẦU PHÚC KHẢO
+    def create_review_request(self, section_id, reason):
+        if not reason or len(reason.strip()) < 10:
+            return False, "⚠️ Lý do phúc khảo phải dài hơn 10 ký tự!"
+
+        try:
+            existing_req = self.db.query(GradeReviewRequest)\
+                .filter(GradeReviewRequest.studentID == self.student_id)\
+                .filter(GradeReviewRequest.sectionID == section_id).first()
+            
+            if existing_req:
+                return False, f"⚠️ Bạn đã gửi yêu cầu phúc khảo cho môn này rồi! (Mã đơn: {existing_req.requestID})"
+
+            new_id = f"RQ{int(time.time()) % 1000000}" 
+            
+            new_req = GradeReviewRequest(
+                requestID=new_id,
+                studentID=self.student_id,
+                sectionID=section_id,
+                studentComment=reason,
+                status=0,
+                createDate=date.today()
+            )
+            self.db.add(new_req)
+            self.db.commit()
+            return True, "✅ Đã gửi yêu cầu thành công!"
+        except Exception as e:
+            self.db.rollback()
+            return False, f"Lỗi: {str(e)}"
+        finally:
+            self.db.close()
+
+    # 8. LẤY LỊCH SỬ PHÚC KHẢO (Đã sửa self.session -> self.db)
+    def get_review_history(self, student_id):
+        try:
+            # Dùng self.db thay vì self.session
+            reqs = self.db.query(GradeReviewRequest).filter_by(studentID=student_id).all()
+            
+            data = []
+            for r in reqs:
+                sec = self.db.query(CourseSection).get(r.sectionID)
+                c_name = "Unknown"
+                if sec:
+                    course = self.db.query(Course).get(sec.courseID)
+                    if course: c_name = course.courseName
+                
+                status_map = {0: "Chưa xử lý", 1: "Đã duyệt", 2: "Từ chối"}
+                
+                data.append({
+                    "requestID": r.requestID,
+                    "sectionID": r.sectionID,
+                    "courseName": c_name,
+                    "date": r.createDate,
+                    "reason": r.studentComment,
+                    "status": status_map.get(r.status, "Khác"),
+                    "reply": r.lecturerReply
+                })
+            return data
+        except Exception as e:
+            print(f"Lỗi history: {e}")
+            return []
+        finally:
+            self.db.close()
+            
+    # 9. HỦY ĐƠN (Đã sửa self.session -> self.db)
+    def cancel_review_request(self, request_id):
+        try:
+            # Dùng self.db thay vì self.session
+            req = self.db.query(GradeReviewRequest).get(request_id)
+            if req and req.status == 0: 
+                self.db.delete(req)
+                self.db.commit()
+                return True, "✅ Đã hủy yêu cầu thành công."
+            return False, "❌ Không thể hủy (Đơn không tồn tại hoặc GV đã duyệt)."
+        except Exception as e:
+            self.db.rollback()
+            return False, str(e)
+        finally:
+            self.db.close()

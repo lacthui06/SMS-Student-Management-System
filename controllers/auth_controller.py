@@ -1,120 +1,117 @@
-import streamlit as st
-import smtplib
-import random
-import string
+import smtplib, random, string, hashlib
 from email.mime.text import MIMEText
-from core.database import MockDatabase
+from core.database import Session as DBSession
+from core.models_orm import Account, Student, Lecturer 
 
-# --- CẤU HÌNH GMAIL ---
-# ⚠️ CẢNH BÁO: Không được lộ mật khẩu này nếu public lên GitHub
-SENDER_EMAIL = "superstudentmanagementsystem@gmail.com"  # <--- Thay email của bạn vào đây
-SENDER_PASSWORD = "qhld fiuz zdrb dghx"    # <--- Dán mã 16 ký tự App Password vào đây
+SENDER_EMAIL = "superstudentmanagementsystem@gmail.com" 
+SENDER_PASSWORD = "fuop lxpg sxmj lsmv" 
 
 class AuthController:
     def __init__(self):
-        self.db = MockDatabase()
+        self.session = DBSession()
 
-    def login(self, username, password):
-        user = self.db.get_user(username)
-        if user and user.password == password:
-            if hasattr(user, 'status') and user.status is False:
-                return None
-            return user
-        return None
+    def _hash_password(self, password):
+        return hashlib.sha256(str(password).encode('utf-8')).hexdigest()
+
+    def login(self, user_id, password_input):
+        try:
+            user = self.session.query(Account).filter_by(userID=user_id).first()
+            
+            if not user: return None, "❌ Tên đăng nhập không tồn tại!"
+            if user.status == 0: return None, "🚫 Tài khoản đã bị khóa."
+
+            hashed_input = self._hash_password(password_input)
+            
+            # Biến cờ để xác định đăng nhập thành công hay không
+            login_success = False
+            msg = ""
+
+            # Kiểm tra mật khẩu cũ (chưa hash)
+            if len(user.password) < 60:
+                if user.password == password_input:
+                    user.password = hashed_input
+                    self.session.commit()
+                    login_success = True
+                    msg = "✅ Đăng nhập thành công (Đã nâng cấp bảo mật)!"
+                else:
+                    msg = "❌ Mật khẩu không đúng!"
+            
+            # Kiểm tra mật khẩu chuẩn (đã hash)
+            elif user.password == hashed_input:
+                login_success = True
+                msg = "✅ Đăng nhập thành công!"
+            else:
+                msg = "❌ Mật khẩu không đúng!"
+
+            if login_success:
+                # 👇 QUAN TRỌNG: Tách user ra khỏi session để dùng được sau khi close()
+                self.session.expunge(user)
+                return user, msg
+            else:
+                return None, msg
+
+        except Exception as e:
+            return None, f"Lỗi: {str(e)}"
+        finally:
+            self.session.close()
 
     def change_password(self, user_id, old_pass, new_pass, confirm_pass):
-        if not old_pass or not new_pass or not confirm_pass:
-            return False, "Vui lòng nhập đầy đủ thông tin."
-        if new_pass != confirm_pass:
-            return False, "Mật khẩu xác nhận không khớp."
-        if new_pass == old_pass:
-            return False, "❌ Mật khẩu mới không được trùng với mật khẩu hiện tại."
-        if len(new_pass) < 3:
-            return False, "Mật khẩu mới phải có ít nhất 3 ký tự."
+        try:
+            if new_pass != confirm_pass: return False, "❌ Mật khẩu xác nhận không khớp!"
+            if len(new_pass) < 6: return False, "⚠️ Mật khẩu quá ngắn."
 
-        user = self.db.get_user(user_id)
-        if user and user.password == old_pass:
-            user.password = new_pass
-            return True, "✅ Đổi mật khẩu thành công!"
-        else:
-            return False, "❌ Mật khẩu cũ không chính xác."
+            user = self.session.query(Account).filter_by(userID=user_id).first()
+            if not user: return False, "Tài khoản không tồn tại."
 
-    # --- HÀM TẠO MÃ OTP NGẪU NHIÊN ---
-    def _generate_otp(self, length=6):
-        return ''.join(random.choices(string.digits, k=length))
+            hashed_old = self._hash_password(old_pass)
+            is_valid_old = False
+            
+            if len(user.password) < 60:
+                if user.password == old_pass: is_valid_old = True
+            else:
+                if user.password == hashed_old: is_valid_old = True
+            
+            if is_valid_old:
+                user.password = self._hash_password(new_pass)
+                self.session.commit()
+                return True, "✅ Đổi mật khẩu thành công!"
+            return False, "❌ Mật khẩu cũ không đúng!"
+        finally: self.session.close()
 
-    # --- HÀM GỬI EMAIL THỰC TẾ (SMTP) ---
-    def _send_email_via_gmail(self, receiver_email, otp_code):
-        msg = MIMEText(f"Mã xác thực (OTP) của bạn là: {otp_code}\nMã này có hiệu lực trong 5 phút.\nVui lòng không chia sẻ cho ai khác.", 'plain', 'utf-8')
-        msg['Subject'] = "MÃ XÁC THỰC KHÔI PHỤC MẬT KHẨU - SMS PROJECT"
+    def send_email_otp(self, receiver_email, otp_code):
+        msg = MIMEText(f"Mã OTP của bạn là: {otp_code}\nCó hiệu lực trong 5 phút.")
+        msg['Subject'] = "🔐 Mã xác thực OTP - EduSoft"
         msg['From'] = SENDER_EMAIL
         msg['To'] = receiver_email
-
         try:
-            # Kết nối đến server Gmail
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
                 server.login(SENDER_EMAIL, SENDER_PASSWORD)
-                server.send_message(msg)
-            return True, None
+                server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
+            return True
         except Exception as e:
-            return False, str(e)
+            print(f"Lỗi gửi mail: {e}")
+            return False
 
-    # --- CHỨC NĂNG QUÊN MẬT KHẨU ---
     def recover_password(self, email):
-        """
-        Gửi mã OTP thật vào email qua Gmail SMTP
-        """
-        # 1. Tìm user trong DB
-        users = st.session_state.get('users', {})
-        found_user = None
-        for u in users.values():
-            if hasattr(u, 'email') and u.email == email:
-                found_user = u
-                break
-        
-        if not found_user:
-            return False, "❌ Email không tồn tại trong hệ thống."
+        try:
+            target = self.session.query(Student).filter_by(email=email).first() or \
+                     self.session.query(Lecturer).filter_by(email=email).first()
+            if not target: return False, "❌ Email chưa đăng ký.", None
 
-        # 2. Tạo OTP ngẫu nhiên (6 số)
-        otp = self._generate_otp()
-        
-        # 3. Gửi Email thật
-        success, error_msg = self._send_email_via_gmail(email, otp)
-        
-        if success:
-            # Lưu OTP vào Session
-            st.session_state['reset_otp'] = {
-                'email': email,
-                'code': otp
-            }
-            return True, f"✅ Đã gửi mã OTP đến {email}. Vui lòng kiểm tra hộp thư (kể cả Spam)."
-        else:
-            return False, f"❌ Lỗi gửi mail: {error_msg}"
+            otp = ''.join(random.choices(string.digits, k=6))
+            if self.send_email_otp(email, otp): return True, f"✅ Đã gửi OTP đến {email}", otp
+            return False, "⚠️ Lỗi gửi mail.", None
+        finally: self.session.close()
 
-    def verify_otp_and_reset(self, email, otp, new_pass):
-        """
-        Xác thực OTP và đặt lại mật khẩu
-        """
-        stored_data = st.session_state.get('reset_otp')
-        
-        if not stored_data:
-            return False, "❌ Yêu cầu hết hạn. Vui lòng gửi lại OTP."
-
-        if stored_data['email'] != email:
-            return False, "❌ Email không khớp."
-        
-        if stored_data['code'] != otp:
-            return False, "❌ Mã OTP không chính xác."
-
-        if not new_pass:
-            return False, "❌ Vui lòng nhập mật khẩu mới."
-
-        # Cập nhật DB
-        users = st.session_state.get('users', {})
-        for u in users.values():
-            if hasattr(u, 'email') and u.email == email:
-                u.password = new_pass
-                del st.session_state['reset_otp']
-                return True, "✅ Đặt lại mật khẩu thành công! Hãy đăng nhập ngay."
-        
-        return False, "❌ Lỗi hệ thống: Không tìm thấy user."
+    def reset_password_with_otp(self, email, new_pass):
+        try:
+            target = self.session.query(Student).filter_by(email=email).first() or \
+                     self.session.query(Lecturer).filter_by(email=email).first()
+            if target:
+                user = self.session.query(Account).filter_by(userID=target.userID).first()
+                if user:
+                    user.password = self._hash_password(new_pass)
+                    self.session.commit()
+                    return True, "✅ Đặt lại mật khẩu thành công!"
+            return False, "❌ Lỗi tài khoản."
+        finally: self.session.close()
