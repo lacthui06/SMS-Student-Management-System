@@ -612,7 +612,19 @@ WHERE studentID = 'SV_AI_01' AND sectionID = 'Lop_Test_AI';
 
 SET FOREIGN_KEY_CHECKS = 1;
 
--- Xóa bớt các đăng ký môn bị trùng (chỉ giữ lại cái có điểm, xóa cái điểm NULL)
-DELETE FROM GradeReport 
-WHERE studentID = 'SV001' 
-AND totalScore IS NULL; -- Xóa dòng nào chưa có điểm tổng kết
+DELETE FROM GradeReviewRequest 
+WHERE studentID = 'SV001';
+
+SELECT studentID, fullName, majorID FROM Student 
+WHERE userID = 'SV001'; 
+-- Ví dụ: WHERE userID = 'SV01';
+
+
+INSERT INTO Major (majorID, majorName) 
+VALUES ('M01', 'Công Nghệ Thông Tin');
+
+
+UPDATE Major 
+SET requiredCredits = 120 
+WHERE majorID = 'M01'; 
+-- (Hoặc 'M01' tùy theo lúc nãy bạn đặt mã là gì)

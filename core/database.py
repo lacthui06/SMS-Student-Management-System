@@ -1,9 +1,12 @@
 # core/database.py
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+import os
 
-# 1. Cấu hình URL (Thay đổi pass nếu cần)
-DB_URL = 'mysql+mysqlconnector://root:221106@localhost/gr2'
+db_host = os.getenv('DB_HOST', 'localhost')
+
+# Ghép vào chuỗi kết nối (Dùng f-string)
+DB_URL = f'mysql+mysqlconnector://root:221106@{db_host}/gr2'
 
 # 2. Tạo Engine
 engine = create_engine(DB_URL, pool_recycle=3600, echo=False)

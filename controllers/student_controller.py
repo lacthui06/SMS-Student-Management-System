@@ -103,7 +103,7 @@ class StudentController:
                 
             return {
                 "accumulated": accumulated_credits,
-                "required": major.requiredCredits if major else 150,
+                "required": major.requiredCredits if major else 0,
                 "details": details
             }
         finally:

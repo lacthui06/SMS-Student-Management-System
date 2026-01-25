@@ -5,6 +5,7 @@ from controllers.student_controller import StudentController
 from controllers.auth_controller import AuthController
 from core.database import Session
 from core.models_orm import Student
+from datetime import datetime
 
 def render_student_ui(user):
     # --- 1. LẤY THÔNG TIN SINH VIÊN ---
@@ -58,23 +59,34 @@ def render_student_ui(user):
     # === TRANG 1: DASHBOARD ===
     if page == "Dashboard":
         st.title("🏠 Trang chủ Sinh viên")
-        
+
+        # Hàm xử lý ngày tháng cho đẹp (Bỏ giờ phút giây thừa thãi)
+        def format_date(d):
+            if not d: return "..."
+            # Nếu là chuỗi thì trả về luôn, nếu là datetime thì format lại
+            return d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else str(d)
+
         with st.container(border=True):
             st.subheader("📌 Thông tin sinh viên")
+            
+            # --- DÒNG 1: THÔNG TIN ĐỊNH DANH (3 Cột) ---
             c1, c2, c3 = st.columns(3)
-            c1.markdown(f"**MSSV:** {current_student.studentID}")
-            c2.markdown(f"**Họ tên:** {current_student.fullName}")
-            c3.markdown(f"**Giới tính:** {'Nam' if current_student.gender else 'Nữ'}")
-            st.divider() 
+            c1.markdown(f"**🆔 MSSV:** {current_student.studentID}")
+            c2.markdown(f"**👤 Họ tên:** {current_student.fullName}")
+            c3.markdown(f"**⚧ Giới tính:** {'Nam' if current_student.gender else 'Nữ'}")
+            
+            st.divider() # Một đường kẻ duy nhất ở giữa cho thoáng
+            
+            # --- DÒNG 2: THÔNG TIN CHI TIẾT (3 Cột) ---
+            # Đưa "Ngành" xuống đây để lấp đầy khoảng trống
             c4, c5, c6 = st.columns(3)
-            c4.markdown(f"**Ngành:** {current_student.majorID}")
-            c5.markdown(f"**Khóa học:** 2024") 
-            c6.markdown(f"**Hệ đào tạo:** Chính quy")
+            
+            c4.markdown(f"**🎓 Ngành:** {current_student.majorID}")
+            c5.markdown(f"**🎂 Ngày sinh:** {format_date(current_student.dob)}")
+            c6.markdown(f"**📱 SĐT:** {current_student.phone}")
             st.divider()
-            c7, c8, c9 = st.columns(3)
-            c7.markdown(f"**Ngày sinh:** {current_student.dob}")
-            c8.markdown(f"**Email:** {current_student.email}")
-            c9.markdown(f"**SĐT:** {current_student.phone}")
+            # --- DÒNG 3: EMAIL (Riêng 1 dòng hoặc ghép vào nếu muốn) ---
+            st.markdown(f"**📧 Email:** {current_student.email}")
 
         st.markdown("### 🚀 Truy cập nhanh")
         col1, col2, col3 = st.columns(3)
@@ -155,14 +167,38 @@ def render_student_ui(user):
     elif page == "Tiến độ học tập":
         c1, c2 = st.columns([4, 1])
         c1.title("📊 Tiến độ học tập")
+        # Nút Back vẫn giữ nguyên logic cũ của bạn
         c2.button("⬅️ Trang chủ", key="back_prog", on_click=navigate, args=("Dashboard",))
 
         prog = ctrl.get_progress_data()
-        st.metric("Tín chỉ tích lũy", f"{prog['accumulated']} / {prog['required']}")
-        st.progress(min(prog['accumulated'] / prog['required'], 1.0))
+
+        # --- ĐOẠN CODE ĐÃ SỬA LỖI (AN TOÀN TUYỆT ĐỐI) ---
+        
+        # 1. Lấy số tín chỉ tích lũy (nếu None thì coi là 0)
+        acc = prog.get('accumulated') or 0
+        
+        # 2. Lấy tổng tín chỉ yêu cầu
+        req = prog.get('required')
+
+        # 3. Kiểm tra trước khi chia
+        if req and req > 0:
+            # Nếu có tổng tín chỉ đàng hoàng -> Tính % bình thường
+            percent = min(acc / req, 1.0)
+            label = f"{acc} / {req}"
+        else:
+            # Nếu chưa có khung chương trình (req bị None) -> Set 0% để không sập App
+            percent = 0.0
+            label = f"{acc} / (Chưa cập nhật khung CT)"
+
+        # 4. Hiển thị ra màn hình
+        st.metric("Tín chỉ tích lũy", label)
+        st.progress(percent)
+        
+        # ------------------------------------------------
+
         st.divider()
         st.subheader("Danh sách các môn đã hoàn thành")
-        if prog['details']:
+        if prog.get('details'):
             st.dataframe(pd.DataFrame(prog['details']), use_container_width=True, hide_index=True)
         else:
             st.info("Chưa có môn học nào hoàn thành.")

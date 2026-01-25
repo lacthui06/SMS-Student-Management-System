@@ -25,7 +25,7 @@ def render_admin_ui(user):
     st.sidebar.title("🛠️ Admin Portal")
     st.sidebar.write(f"Xin chào, {user.userID}")
     
-    options = ["Dashboard", "Tài khoản (UC13, 14)", "Học kỳ", "Môn học", "Lớp học phần", "Khung chương trình", "Đổi mật khẩu"]
+    options = ["Dashboard", "Tài khoản", "Học kỳ", "Môn học", "Lớp học phần", "Khung chương trình", "Đổi mật khẩu"]
     
     try: idx = options.index(st.session_state['admin_nav'])
     except: idx = 0
@@ -74,7 +74,7 @@ def render_admin_ui(user):
         # 👇 SỬA LẠI THEO PHONG CÁCH STUDENT (IF ST.BUTTON)
         c1, c2, c3 = st.columns(3)
         with c1: 
-            if st.button("👥 Tài khoản (UC13, 14)", use_container_width=True, key="qa_acc"): navigate("Tài khoản (UC13, 14)")
+            if st.button("👥 Tài khoản", use_container_width=True, key="qa_acc"): navigate("Tài khoản (UC13, 14)")
         with c2: 
             if st.button("📅 Quản lý Học kỳ", use_container_width=True, key="qa_sem"): navigate("Học kỳ")
         with c3: 
@@ -89,9 +89,9 @@ def render_admin_ui(user):
             if st.button("🔐 Đổi mật khẩu", use_container_width=True, key="qa_pass"): navigate("Đổi mật khẩu")
 
     # --- 2. TÀI KHOẢN ---
-    elif menu == "Tài khoản (UC13, 14)":
+    elif menu == "Tài khoản":
         render_header("👥 Quản lý Tài khoản")
-        tab1, tab2 = st.tabs(["📥 Import (UC13)", "🔒 Khóa tài khoản (UC14)"])
+        tab1, tab2 = st.tabs(["📥 Import", "🔒 Khóa tài khoản"])
         
         with tab1:
             st.info("Hỗ trợ file Excel/CSV.")
@@ -101,9 +101,22 @@ def render_admin_ui(user):
                 if df is not None:
                     st.dataframe(df.head(), use_container_width=True)
                     if st.button("Lưu vào hệ thống", type="primary"):
-                        ok, msg = ctrl.save_import_users(df)
-                        if ok: st.success(msg)
-                        else: st.error(msg)
+                        # Gọi hàm mới (nhận về count và errors)
+                        count, errors = ctrl.save_import_users(df)
+                        
+                        # 1. Thông báo thành công
+                        if count > 0:
+                            st.success(f"✅ Đã import thành công {count} tài khoản mới!")
+                        else:
+                            st.warning("⚠️ Không có tài khoản mới nào được thêm.")
+
+                        # 2. HIỂN THỊ DANH SÁCH LỖI (Quan trọng)
+                        if errors:
+                            st.error(f"❌ Có {len(errors)} dòng bị lỗi/trùng lặp (đã bỏ qua):")
+                            # Hiện danh sách lỗi trong khung cho dễ nhìn
+                            with st.expander("Xem chi tiết lỗi", expanded=True):
+                                for err in errors:
+                                    st.write(f"- {err}")
         with tab2:
             search = st.text_input("🔍 Tìm kiếm User:")
             if search:

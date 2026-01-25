@@ -35,27 +35,74 @@ class AdminController:
         except Exception: return None
 
     def save_import_users(self, df):
-        count = 0
-        try:
-            for index, row in df.iterrows():
-                uid = str(row['UserID'])
-                existing_user = self.session.query(User).filter_by(userID=uid).first()
-                if existing_user: continue
+        success_count = 0
+        error_list = [] # 📝 Danh sách chứa các dòng lỗi
 
-                new_u = None
-                if row['Role'] == 'Student':
-                    new_u = Student(userID=uid, password=str(row['Password']), fullName=row['FullName'], email=row['Email'])
-                elif row['Role'] == 'Lecturer':
-                    new_u = Lecturer(userID=uid, password=str(row['Password']), fullName=row['FullName'], email=row['Email'])
+        try:
+            # 1. CHUẨN HÓA TÊN CỘT
+            df.columns = [str(c).strip().lower() for c in df.columns]
+            
+            # 2. DUYỆT DATA
+            for index, row in df.iterrows():
+                # --- TÌM ID ---
+                uid = None
+                possible_id_cols = ['userid', 'lecturerid', 'studentid', 'magv', 'masv', 'id', 'accountid']
+                for col in possible_id_cols:
+                    if col in df.columns:
+                        val = str(row[col]).strip()
+                        if val and val.lower() != 'nan':
+                            uid = val
+                            break
                 
-                if new_u:
-                    self.session.add(new_u)
-                    count += 1
+                # Lỗi 1: Không có ID
+                if not uid: 
+                    error_list.append(f"Dòng {index+1}: Thiếu ID (Bỏ qua)")
+                    continue
+
+                # Lỗi 2: Trùng ID (Account đã có)
+                existing = self.session.query(Account).filter_by(userID=uid).first()
+                if existing: 
+                    error_list.append(f"Dòng {index+1}: ID '{uid}' đã tồn tại (Trùng lặp)")
+                    continue
+
+                # --- XỬ LÝ DATA HỢP LỆ ---
+                try:
+                    full_name = row.get('fullname') or row.get('hoten') or "No Name"
+                    email = row.get('email') or ""
+                    if pd.isna(email): email = ""
+
+                    role = row.get('role')
+                    if not role or pd.isna(role):
+                        if uid.upper().startswith('GV') or uid.upper().startswith('L'): role = 'Lecturer'
+                        elif uid.upper().startswith('SV') or uid.upper().startswith('S'): role = 'Student'
+                        else: role = 'Lecturer'
+
+                    # Tạo Account
+                    acc = Account(userID=uid, password=uid, role=role, status=True)
+                    self.session.add(acc)
+                    self.session.flush()
+
+                    # Tạo Profile
+                    if role == 'Student':
+                        stu = Student(studentID=uid, userID=uid, fullName=full_name, email=email)
+                        self.session.add(stu)
+                    elif role == 'Lecturer':
+                        lec = Lecturer(lecturerID=uid, userID=uid, fullName=full_name, email=email)
+                        self.session.add(lec)
+                    
+                    success_count += 1
+
+                except Exception as inner_e:
+                    error_list.append(f"Dòng {index+1} ({uid}): Lỗi hệ thống - {str(inner_e)}")
+            
             self.session.commit()
-            return True, f"Import thành công {count} tài khoản."
+            
+            # Trả về kết quả: (Số thành công, Danh sách lỗi)
+            return success_count, error_list
+
         except Exception as e:
             self.session.rollback()
-            return False, f"Lỗi Import: {str(e)}"
+            return 0, [f"Lỗi nghiêm trọng toàn file: {str(e)}"]
 
     # --- UC 14: LOCK USER ---
     def get_users_filtered(self, search_term=""):

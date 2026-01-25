@@ -28,7 +28,7 @@ def render_lecturer_ui(user_account):
     # --- SIDEBAR ---
     st.sidebar.title(f"👨‍🏫 GV: {lecturer_info.fullName}")
     
-    options = ["Dashboard", "Hồ sơ", "Lịch dạy", "Nhập điểm (UC10)", "Cập nhật điểm (UC11)", "Duyệt phúc khảo", "Đổi mật khẩu"]
+    options = ["Dashboard", "Hồ sơ", "Lịch dạy", "Nhập điểm", "Cập nhật điểm", "Duyệt phúc khảo", "Đổi mật khẩu"]
     
     # Xác định index
     try: idx = options.index(st.session_state['lec_nav'])
@@ -90,10 +90,10 @@ def render_lecturer_ui(user_account):
         c1, c2, c3 = st.columns(3)
         c1.button("👤 Hồ sơ cá nhân", use_container_width=True, key="QA_HOSO", on_click=set_nav, args=("Hồ sơ",))
         c2.button("📅 Xem Lịch dạy", use_container_width=True, key="QA_LICH", on_click=set_nav, args=("Lịch dạy",))
-        c3.button("📝 Nhập điểm (UC10)", use_container_width=True, key="QA_NHAP", on_click=set_nav, args=("Nhập điểm (UC10)",))
+        c3.button("📝 Nhập điểm", use_container_width=True, key="QA_NHAP", on_click=set_nav, args=("Nhập điểm",))
             
         c4, c5, c6 = st.columns(3)
-        c4.button("✏️ Cập nhật điểm (UC11)", use_container_width=True, key="QA_SUA", on_click=set_nav, args=("Cập nhật điểm (UC11)",))
+        c4.button("✏️ Cập nhật điểm", use_container_width=True, key="QA_SUA", on_click=set_nav, args=("Cập nhật điểm",))
         c5.button("📩 Duyệt phúc khảo", use_container_width=True, key="QA_PK", on_click=set_nav, args=("Duyệt phúc khảo",))
         c6.button("🔐 Đổi mật khẩu", use_container_width=True, key="QA_MK", on_click=set_nav, args=("Đổi mật khẩu",))
 
@@ -146,8 +146,8 @@ def render_lecturer_ui(user_account):
             st.info("Hiện không có lịch dạy.")
 
     # --- 4. NHẬP ĐIỂM (UC10) ---
-    elif menu == "Nhập điểm (UC10)":
-        render_header("📝 Nhập điểm (UC10)")
+    elif menu == "Nhập điểm":
+        render_header("📝 Nhập điểm")
         opts = ctrl.get_my_sections()
         
         if not opts:
@@ -185,8 +185,8 @@ def render_lecturer_ui(user_account):
                 else: st.error(msg)
 
     # --- 5. CẬP NHẬT ĐIỂM (UC11) ---
-    elif menu == "Cập nhật điểm (UC11)":
-        render_header("✏️ Cập nhật điểm (UC11)")
+    elif menu == "Cập nhật điểm":
+        render_header("✏️ Cập nhật điểm")
         opts = ctrl.get_my_sections()
         
         if not opts:
