@@ -264,7 +264,7 @@ def render_lecturer_ui(user_account):
                             if act == "Chấp nhận":
                                 ctrl.process_review(r.requestID, 1, reply)
                                 st.success("Đã duyệt. Chuyển trang...")
-                                st.session_state['lec_nav'] = "Cập nhật điểm (UC11)"
+                                st.session_state['lec_nav'] = "Cập nhật điểm"
                                 st.session_state['target_section'] = item['section_id']
                                 st.rerun()
                             elif act == "Từ chối":

@@ -203,27 +203,46 @@ def render_student_ui(user):
         else:
             st.info("Chưa có môn học nào hoàn thành.")
 
-    # === TRANG 5: KẾT QUẢ HỌC TẬP & PHÚC KHẢO ===
+   # === TRANG 5: KẾT QUẢ HỌC TẬP & PHÚC KHẢO ===
     elif page == "Kết quả học tập":
-        c1, c2 = st.columns([4, 1])
-        c1.title("📑 Bảng điểm & Phúc khảo")
-        c2.button("⬅️ Trang chủ", key="back_res", on_click=navigate, args=("Dashboard",))
+        st.title("📑 Bảng điểm & Phúc khảo")
 
-        # 1. HIỂN THỊ BẢNG ĐIỂM
-        grades = ctrl.get_grade_table()
-        if grades:
-            st.dataframe(pd.DataFrame(grades), use_container_width=True, hide_index=True)
-        else:
-            st.info("Chưa có dữ liệu điểm.")
+        # --- PHẦN 1: XEM ĐIỂM (THEO ĐẶC TẢ) ---
         
+        # 1. Gọi hàm lấy danh sách Học kỳ
+        semesters = ctrl.get_student_semesters()
+        
+        if not semesters:
+            st.info("⚠️ Bạn chưa có dữ liệu học tập nào.")
+        else:
+            # 2. Tạo Dropdown chọn Học kỳ
+            sem_dict = {s.semesterID: s.name for s in semesters}
+            # Mặc định chọn học kỳ mới nhất (cuối danh sách)
+            sel_sem = st.selectbox("Chọn học kỳ:", list(sem_dict.keys()), format_func=lambda x: sem_dict[x])
+
+            # 3. Gọi hàm lấy GPA, CPA và Bảng điểm chi tiết
+            df_grades, gpa, cpa = ctrl.get_academic_results(sel_sem)
+
+            # 4. Hiển thị GPA và CPA (KPIs)
+            c1, c2 = st.columns(2)
+            c1.metric(f"GPA ({sem_dict[sel_sem]})", f"{gpa} / 10")
+            c2.metric("CPA Tích lũy", f"{cpa} / 10", delta="Toàn khóa")
+
+            st.divider()
+
+            # 5. Hiển thị bảng điểm
+            st.subheader(f"Chi tiết bảng điểm: {sem_dict[sel_sem]}")
+            st.dataframe(df_grades, use_container_width=True, hide_index=True)
+            st.caption("(*) Điểm chữ A, B, C, D, F quy đổi từ thang điểm 10.")
+
         st.divider()
 
-        # 2. HIỂN THỊ LỊCH SỬ (Phần này bạn đã có)
-        st.subheader("Lịch sử yêu cầu phúc khảo")
-        history = ctrl.get_review_history(current_student.studentID)
+        # --- PHẦN 2: PHÚC KHẢO (CODE CỦA BẠN GIỮ NGUYÊN LOGIC) ---
+        st.subheader("📝 Quản lý Phúc khảo")
         
+        history = ctrl.get_review_history(current_student.studentID)
         if not history:
-            st.info("Bạn chưa gửi yêu cầu phúc khảo nào.")
+            st.info("Chưa có lịch sử phúc khảo.")
         else:
             for item in history:
                 status_color = "orange" if item['status'] == "Chưa xử lý" else "green" if item['status'] == "Đã duyệt" else "red"
@@ -233,11 +252,10 @@ def render_student_ui(user):
                         st.write(f"**Ngày gửi:** {item['date']}")
                         st.write(f"**Lý do:** {item['reason']}")
                         if item['reply']:
-                            st.info(f"👨‍🏫 **Phản hồi GV:** {item['reply']}")
+                            st.info(f"👨‍🏫 **GV Phản hồi:** {item['reply']}")
                     with c2:
                         if item['status'] == "Chưa xử lý":
-                            st.write("") 
-                            if st.button("🗑️ Hủy đơn", key=f"del_{item['requestID']}", type="primary"):
+                            if st.button("🗑️ Hủy đơn", key=f"del_{item['requestID']}"):
                                 ok, msg = ctrl.cancel_review_request(item['requestID'])
                                 if ok:
                                     st.success(msg)
@@ -245,37 +263,27 @@ def render_student_ui(user):
                                     st.rerun()
                                 else:
                                     st.error(msg)
-                        else:
-                            st.write("🔒 *Đã đóng*")
 
         st.divider()
-
-        # 3. 👇 FORM GỬI YÊU CẦU MỚI (PHẦN QUAN TRỌNG ĐANG THIẾU) 👇
-        st.subheader("Gửi yêu cầu Phúc khảo mới")
+        st.subheader("Gửi yêu cầu mới")
         
-        # Lấy danh sách môn học
+        # Logic chọn môn để phúc khảo
         all_courses = ctrl.get_reviewable_courses()
-        
-        # Lọc ra những môn chưa gửi yêu cầu (hoặc đã bị từ chối thì cho gửi lại tùy logic, ở đây mình lọc đơn đang pending/approved)
-        pending_sections = [h['sectionID'] for h in history if h['status'] != "Từ chối"]
+        pending_sections = [h['sectionID'] for h in history if h['status'] == "Chưa xử lý"]
+        # Chỉ hiện môn chưa có đơn đang chờ
         available_courses = [c for c in all_courses if c.sectionID not in pending_sections]
 
         if not available_courses:
-            st.warning("Bạn không còn môn học nào đủ điều kiện phúc khảo (hoặc đã gửi yêu cầu hết rồi).")
+            st.success("✅ Bạn không có môn nào cần phúc khảo.")
         else:
             with st.form("create_review"):
-                # Tạo list tên môn để hiển thị
                 options_map = {c.sectionID: f"{c.courseName} ({c.sectionID})" for c in available_courses}
+                selected_sec_id = st.selectbox("Chọn môn:", list(options_map.keys()), format_func=lambda x: options_map[x])
+                reason = st.text_area("Lý do phúc khảo (>10 ký tự):")
                 
-                selected_sec_id = st.selectbox("Chọn môn muốn phúc khảo:", list(options_map.keys()), format_func=lambda x: options_map[x])
-                
-                reason = st.text_area("Lý do phúc khảo (Bắt buộc, >10 ký tự):", placeholder="Em thấy bài làm tốt nhưng điểm thấp...")
-                
-                submitted = st.form_submit_button("🚀 Gửi yêu cầu")
-                
-                if submitted:
+                if st.form_submit_button("🚀 Gửi yêu cầu"):
                     if len(reason.strip()) < 10:
-                        st.error("Vui lòng nhập lý do cụ thể hơn (trên 10 ký tự).")
+                        st.error("Vui lòng nhập lý do cụ thể hơn.")
                     else:
                         ok, msg = ctrl.create_review_request(selected_sec_id, reason)
                         if ok:

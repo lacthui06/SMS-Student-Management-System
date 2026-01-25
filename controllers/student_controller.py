@@ -12,34 +12,66 @@ from core.models_orm import (
 
 class StudentController:
     def __init__(self, student_id=None):
-        self.db = Session() # Biến kết nối là self.db
+        self.db = Session() # Giữ nguyên biến self.db
         self.student_id = student_id
 
-    # 1. LẤY BẢNG ĐIỂM
-    def get_grade_report(self, student_id):
-        try:
-            results = self.db.query(
-                Course.courseID,
-                Course.courseName,
-                Course.credits,
-                GradeReport.midterm,
-                GradeReport.final,
-                GradeReport.total,
-                GradeReport.letterGrade
-            ).join(CourseSection, GradeReport.sectionID == CourseSection.sectionID)\
-             .join(Course, CourseSection.courseID == Course.courseID)\
-             .filter(GradeReport.studentID == student_id).all()
-            
-            if not results:
-                return None
+    def __del__(self):
+        self.db.close() # Chỉ đóng kết nối khi tắt class
 
-            df = pd.DataFrame(results, columns=[
-                "Mã MH", "Tên Môn Học", "TC", 
-                "Điểm QT", "Điểm Cuối Kỳ", "Tổng Kết", "Điểm Chữ"
-            ])
-            return df
-        finally:
-            self.db.close()
+    # =================================================================
+    # 👇👇👇 PHẦN SỬA LẠI CHO ĐÚNG ĐẶC TẢ (VIEW GRADES) 👇👇👇
+    # =================================================================
+
+    # 1. Lấy danh sách Học kỳ sinh viên đã học (Để làm Dropdown)
+    def get_student_semesters(self):
+        results = self.db.query(Semester.semesterID, Semester.name)\
+            .join(CourseSection, Semester.semesterID == CourseSection.semesterID)\
+            .join(GradeReport, CourseSection.sectionID == GradeReport.sectionID)\
+            .filter(GradeReport.studentID == self.student_id)\
+            .distinct().all()
+        return results
+
+    # 2. Tính GPA, CPA và lấy Bảng điểm chi tiết
+    def get_academic_results(self, selected_sem_id):
+        # A. LẤY TOÀN BỘ ĐIỂM (Để tính CPA Tích lũy)
+        all_records = self.db.query(
+            Course.credits, GradeReport.total, CourseSection.semesterID
+        ).join(CourseSection, GradeReport.sectionID == CourseSection.sectionID)\
+         .join(Course, CourseSection.courseID == Course.courseID)\
+         .filter(GradeReport.studentID == self.student_id).all()
+
+        # Tính CPA (Tích lũy toàn khóa)
+        valid_cpa = [r for r in all_records if r.total is not None]
+        total_pts = sum(r.total * r.credits for r in valid_cpa)
+        total_cre = sum(r.credits for r in valid_cpa)
+        cpa = round(total_pts / total_cre, 2) if total_cre > 0 else 0.0
+
+        # Tính GPA (Học kỳ đang chọn)
+        sem_records = [r for r in valid_cpa if r.semesterID == selected_sem_id]
+        sem_pts = sum(r.total * r.credits for r in sem_records)
+        sem_cre = sum(r.credits for r in sem_records)
+        gpa = round(sem_pts / sem_cre, 2) if sem_cre > 0 else 0.0
+
+        # B. LẤY CHI TIẾT BẢNG ĐIỂM CHO HỌC KỲ ĐÓ
+        details = self.db.query(
+            Course.courseID, Course.courseName, Course.credits,
+            GradeReport.midterm, GradeReport.final, GradeReport.total, GradeReport.letterGrade
+        ).join(CourseSection, GradeReport.sectionID == CourseSection.sectionID)\
+         .join(Course, CourseSection.courseID == Course.courseID)\
+         .filter(
+             GradeReport.studentID == self.student_id, 
+             CourseSection.semesterID == selected_sem_id
+         ).all()
+
+        df = pd.DataFrame(details, columns=[
+            "Mã MH", "Tên Môn Học", "TC", 
+            "Điểm QT", "Điểm CK", "Tổng Kết", "Điểm Chữ"
+        ])
+        
+        # Xử lý dữ liệu trống (Theo đặc tả: Not updated)
+        df = df.fillna("Not updated")
+        
+        return df, gpa, cpa
 
     # 2. LẤY LỊCH HỌC
     def get_timetable(self):

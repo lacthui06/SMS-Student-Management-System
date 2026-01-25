@@ -2,7 +2,7 @@ import streamlit as st
 from controllers.auth_controller import AuthController
 
 def render_login():
-    st.markdown("## 🏫 Đăng nhập Hệ thống (EduSoft)")
+    st.markdown("## 🏫 Đăng nhập Hệ thống SMS")
     
     auth = AuthController()
     
@@ -45,7 +45,7 @@ def render_login():
     # 2. MÀN HÌNH KHÔI PHỤC MẬT KHẨU
     # ==========================================
     elif st.session_state['auth_mode'] == 'recover':
-        st.subheader("🔑 Khôi phục mật khẩu (UC3)")
+        st.subheader("🔑 Khôi phục mật khẩu")
         
         with st.form("recover_form"):
             email = st.text_input("Nhập Email đã đăng ký")

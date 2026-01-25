@@ -210,7 +210,7 @@ INSERT INTO Major VALUES
 ('M01','F01','Công nghệ thông tin',150,450000);
 
 INSERT INTO Admin VALUES
-('AD01','AD01','Nguyễn Thị Thu Trang','Quản trị hệ thống','admin@gr2.edu.vn');
+('AD01','AD01','Nguyễn Thị Thu Trang','Quản trị hệ thống','superstudentmanagementsystem@gmail.com');
 
 INSERT INTO Lecturer VALUES
 ('GV01','GV01','Nguyễn Văn Hùng','1980-05-12','TP.HCM','0901111111','hung@gr2.edu.vn','123456789001','Tiến sĩ',1,'TP.HCM','Giảng viên chính'),
@@ -616,8 +616,7 @@ DELETE FROM GradeReviewRequest
 WHERE studentID = 'SV001';
 
 SELECT studentID, fullName, majorID FROM Student 
-WHERE userID = 'SV001'; 
--- Ví dụ: WHERE userID = 'SV01';
+WHERE userID = 'SV001';
 
 
 INSERT INTO Major (majorID, majorName) 
@@ -626,5 +625,4 @@ VALUES ('M01', 'Công Nghệ Thông Tin');
 
 UPDATE Major 
 SET requiredCredits = 120 
-WHERE majorID = 'M01'; 
--- (Hoặc 'M01' tùy theo lúc nãy bạn đặt mã là gì)
+WHERE majorID = 'M01';
