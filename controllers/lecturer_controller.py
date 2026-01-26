@@ -1,7 +1,6 @@
 import pandas as pd
 import re
 from core.database import Session
-# 👇 FIX 1: Sửa tên import đúng với Model của bạn (GradeReviewRequest)
 from core.models_orm import Lecturer, CourseSection, Student, GradeReport, Course, GradeReviewRequest
 from core.utils import calculate_total, to_letter_grade, get_time_string
 
@@ -72,7 +71,6 @@ class LecturerController:
     def _process_grades(self, section_id, new_data_list, reason=""):
         try:
             count = 0
-            # 👇 FIX 2: Duyệt trực tiếp qua List (bỏ .iterrows())
             for row in new_data_list:
                 # Helper validate từng điểm
                 def validate_score(val):
@@ -129,7 +127,6 @@ class LecturerController:
     # --- REVIEWS ---
     def get_pending_reviews_detailed(self):
         if not self.lecturer: return []
-        # 👇 FIX 3: Sửa query dùng đúng tên GradeReviewRequest
         results = self.session.query(GradeReviewRequest, CourseSection, Course, Student)\
             .join(CourseSection, GradeReviewRequest.sectionID == CourseSection.sectionID)\
             .join(Course, CourseSection.courseID == Course.courseID)\

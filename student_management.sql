@@ -615,13 +615,6 @@ SET FOREIGN_KEY_CHECKS = 1;
 DELETE FROM GradeReviewRequest 
 WHERE studentID = 'SV001';
 
-SELECT studentID, fullName, majorID FROM Student 
-WHERE userID = 'SV001';
-
-
-INSERT INTO Major (majorID, majorName) 
-VALUES ('M01', 'Công Nghệ Thông Tin');
-
 
 UPDATE Major 
 SET requiredCredits = 120 

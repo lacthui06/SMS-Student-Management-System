@@ -19,7 +19,7 @@ class StudentController:
         self.db.close() # Chỉ đóng kết nối khi tắt class
 
     # =================================================================
-    # 👇👇👇 PHẦN SỬA LẠI CHO ĐÚNG ĐẶC TẢ (VIEW GRADES) 👇👇👇
+    #       PHẦN SỬA LẠI CHO ĐÚNG ĐẶC TẢ (VIEW GRADES)
     # =================================================================
 
     # 1. Lấy danh sách Học kỳ sinh viên đã học (Để làm Dropdown)

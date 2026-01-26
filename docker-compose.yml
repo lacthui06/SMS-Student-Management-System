@@ -9,10 +9,8 @@ services:
     # Mở cổng web
     ports:
       - "8501:8501"
-    
-    # Kết nối Database trên máy bạn
     environment:
-      - DB_HOST=host.docker.internal
+      - DB_HOST=db
       - DB_USER=root
       - DB_PASSWORD=221106
       - DB_NAME=gr2

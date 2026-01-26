@@ -68,7 +68,6 @@ def render_lecturer_ui(user_account):
     if menu == "Dashboard":
         st.title("🏠 Trang chủ Giảng viên")
         
-        # 👇 ĐÃ KHÔI PHỤC HIỂN THỊ HỌC VỊ & CHỨC VỤ
         with st.container(border=True):
             st.subheader("📌 Thông tin cá nhân")
             c1, c2 = st.columns(2)
@@ -86,7 +85,6 @@ def render_lecturer_ui(user_account):
             
         st.subheader("🚀 Truy cập nhanh")
         
-        # 👇 BUTTON FIX: Dùng on_click=set_nav (Hoạt động 100%)
         c1, c2, c3 = st.columns(3)
         c1.button("👤 Hồ sơ cá nhân", use_container_width=True, key="QA_HOSO", on_click=set_nav, args=("Hồ sơ",))
         c2.button("📅 Xem Lịch dạy", use_container_width=True, key="QA_LICH", on_click=set_nav, args=("Lịch dạy",))

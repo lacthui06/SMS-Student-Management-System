@@ -49,7 +49,6 @@ def render_login():
         
         with st.form("recover_form"):
             email = st.text_input("Nhập Email đã đăng ký")
-            # Hiển thị luôn các ô nhập liệu như code mẫu của bạn
             otp = st.text_input("Nhập OTP (Kiểm tra email)")
             new_pass = st.text_input("Mật khẩu mới", type="password")
             

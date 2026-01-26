@@ -25,17 +25,13 @@ class AdminController:
         if hasattr(val, 'date'):
             return val.date()
         
-        # 2. Nếu là số (Excel Serial Date: 31118 -> 1985-03-12)
         try:
-            # Ép kiểu sang float để xử lý cả trường hợp chuỗi số "31118"
             val_float = float(val)
-            # Excel Serial Date thường lớn hơn 10000 (năm 1927 trở đi)
             if val_float > 10000:
                 return pd.to_datetime(val_float, unit='D', origin='1899-12-30').date()
         except:
             pass # Không phải số, bỏ qua để thử cách khác
 
-        # 3. Nếu là chuỗi ngày tháng thông thường (dd/mm/yyyy, yyyy-mm-dd...)
         try:
             return pd.to_datetime(val, dayfirst=True, errors='coerce').date()
         except:
@@ -277,8 +273,6 @@ class AdminController:
         room = str(room).strip()
         day = str(day).strip() # Quan trọng: Xóa khoảng trắng thừa ở "Thứ"
         
-        # Validate cơ bản
-        if len(sid) < 3: return False, "❌ Mã lớp quá ngắn!"
         if not room: return False, "❌ Thiếu thông tin Phòng!"
         try:
             p1 = int(p1); p2 = int(p2)
@@ -291,9 +285,7 @@ class AdminController:
             if self.session.query(CourseSection).get(sid): 
                 return False, f"❌ Mã lớp '{sid}' đã tồn tại!"
 
-            # 3. CHECK TRÙNG LỊCH (DÙNG LOGIC SQL GIAO NHAU CHUẨN)
-            # Công thức giao nhau: (StartA < EndB) AND (EndA > StartB)
-            # Tìm các lớp có cùng Học kỳ + cùng Thứ + có giờ giao nhau
+            # 3. CHECK TRÙNG LỊCH
             overlapping_sections = self.session.query(CourseSection).filter(
                 CourseSection.semesterID == sem,
                 CourseSection.dayOfWeek == day,
@@ -301,7 +293,6 @@ class AdminController:
                 CourseSection.endPeriod > p1     # Kết thúc lớp cũ > Bắt đầu lớp mới
             ).all()
 
-            # Duyệt qua các lớp bị giao nhau thời gian để check cụ thể
             for sec in overlapping_sections:
                 # A. Check Trùng GIẢNG VIÊN (Quan trọng nhất)
                 if sec.lecturerID == lid:

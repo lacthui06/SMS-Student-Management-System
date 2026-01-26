@@ -167,12 +167,9 @@ def render_student_ui(user):
     elif page == "Tiến độ học tập":
         c1, c2 = st.columns([4, 1])
         c1.title("📊 Tiến độ học tập")
-        # Nút Back vẫn giữ nguyên logic cũ của bạn
         c2.button("⬅️ Trang chủ", key="back_prog", on_click=navigate, args=("Dashboard",))
 
         prog = ctrl.get_progress_data()
-
-        # --- ĐOẠN CODE ĐÃ SỬA LỖI (AN TOÀN TUYỆT ĐỐI) ---
         
         # 1. Lấy số tín chỉ tích lũy (nếu None thì coi là 0)
         acc = prog.get('accumulated') or 0
